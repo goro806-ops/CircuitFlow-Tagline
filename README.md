@@ -4,7 +4,60 @@
 
 ---
 
-## 1. Platform Name & Tagline
+## 12. Step-by-Step Containerization & Production Deployment Guide
+
+CircuitFlow is fully Dockerized and container-ready for seamless deployment across local environments, cloud container registries, and serverless container platforms.
+
+### Option 1: Local Container Execution with Docker Compose (1-Command Launch)
+```bash
+# Build image and start CircuitFlow containerized web server
+docker compose up --build -d
+
+# View container logs
+docker compose logs -f
+
+# Stop container
+docker compose down
+```
+Access the containerized platform UI at **`http://localhost:3000`**.
+
+### Option 2: Docker CLI Direct Build & Run
+```bash
+# Build standalone Docker container image
+docker build -t circuitflow-platform:latest .
+
+# Run container on port 3000
+docker run -d -p 3000:3000 --name circuitflow-app circuitflow-platform:latest
+```
+
+### Option 3: Deploying Container Image to Cloud Providers
+
+#### A. AWS App Runner / Amazon ECS
+1. Push your built container image to Amazon ECR:
+   ```bash
+   aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <aws_account_id>.dkr.ecr.us-east-1.amazonaws.com
+   docker tag circuitflow-platform:latest <aws_account_id>.dkr.ecr.us-east-1.amazonaws.com/circuitflow:latest
+   docker push <aws_account_id>.dkr.ecr.us-east-1.amazonaws.com/circuitflow:latest
+   ```
+2. In AWS Console, open **App Runner** -> **Create Service** -> Select your ECR repository tag `latest` -> Set Port `3000` -> Deploy!
+
+#### B. Google Cloud Run
+```bash
+# Build & submit directly via Google Cloud Build
+gcloud builds submit --tag gcr.io/<PROJECT_ID>/circuitflow
+
+# Deploy to Cloud Run (Serverless)
+gcloud run deploy circuitflow --image gcr.io/<PROJECT_ID>/circuitflow --platform managed --port 3000 --allow-unauthenticated
+```
+
+#### C. DigitalOcean App Platform / Render / Railway
+1. Connect your GitHub repository to [Render.com](https://render.com) or [DigitalOcean](https://digitalocean.com).
+2. Choose **Environment: Docker**.
+3. Select `Dockerfile` path in repo root and expose port `3000`.
+
+---
+
+## 13. Security, Compliance & License
 
 * **Name:** CircuitFlow
 * **Tagline:** *From Idea to Production-Ready Electronics — Autonomous Hardware Development & Launch Platform*
