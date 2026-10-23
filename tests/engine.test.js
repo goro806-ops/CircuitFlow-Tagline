@@ -15,10 +15,11 @@ const distributorEngine = require('../src/engine/distributor');
 const multiboardEngine = require('../src/engine/multiboard');
 const consumerEngine = require('../src/engine/consumer');
 const negotiatorEngine = require('../src/engine/negotiator');
+const userguideEngine = require('../src/engine/userguide');
 const exportEngine = require('../src/engine/export');
 
 async function runTests() {
-  console.log('--- RUNNING CIRCUITFLOW ALL 13 ENGINES TEST SUITE ---');
+  console.log('--- RUNNING CIRCUITFLOW ALL 14 ENGINES TEST SUITE ---');
 
   // Test 1: Architecture Engine
   console.log('Testing Architecture Engine...');
@@ -115,7 +116,22 @@ async function runTests() {
   assert.ok(mb.interconnections[0].type.includes('FPC'), 'Flex ribbon connection present');
   console.log('✓ Multi-Board & Flex-Rigid System Engine Passed!');
 
-  // Test 13: Production Package Bundler Engine
+  // Test 13: Localized Consumer User Guide Engine
+  console.log('Testing Localized Consumer User Guide Engine...');
+  const guide = userguideEngine.generateUserGuide({
+    productName: 'CircuitFlow Rugged Wearable',
+    consumerProfile: 'extreme-outdoor',
+    region: 'EU',
+    language: 'fr',
+    ipRating: 'IP68'
+  });
+  assert.strictEqual(guide.language, 'fr');
+  assert.strictEqual(guide.region, 'EU');
+  assert.ok(guide.localizedTitle.includes('Guide de Démarrage Rapide'));
+  assert.ok(guide.regulatorySection.applicableStandards.includes('CE RED 2014/53/EU'));
+  console.log('✓ Localized Consumer User Guide Engine Passed!');
+
+  // Test 14: Production Package Bundler Engine
   console.log('Testing Production Release Package Exporter...');
   const zipBuffer = await exportEngine.bundleReleasePackage({
     architecture: arch,

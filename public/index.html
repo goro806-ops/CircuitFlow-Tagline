@@ -51,8 +51,11 @@
         <button class="nav-item" data-tab="testfixture">
           <span class="icon">📍</span> 10. Factory Test Jig
         </button>
+        <button class="nav-item" data-tab="userguide">
+          <span class="icon">🌐</span> 11. Consumer Guide & Localization
+        </button>
         <button class="nav-item" data-tab="export">
-          <span class="icon">🚀</span> 11. Launch & Export
+          <span class="icon">🚀</span> 12. Launch & Export
         </button>
       </nav>
 
@@ -288,7 +291,47 @@
           </div>
         </section>
 
-        <!-- View 11: Export -->
+        <!-- View 11: Consumer Guide & Localization -->
+        <section id="view-userguide" class="tab-view">
+          <div class="card">
+            <h3>Localized Consumer User Guide & Safety Manual</h3>
+            <p class="subtitle">Generate region-specific, multi-language quick start guides, safety warnings, and compliance packaging inserts.</p>
+
+            <div class="form-row margin-top">
+              <div class="form-group">
+                <label>Target Region:</label>
+                <select id="userguide-region-select">
+                  <option value="US" selected>North America (FCC Part 15, UL 62368-1, California Prop 65)</option>
+                  <option value="EU">European Union (CE RED 2014/53/EU, EN 62368, WEEE, RoHS)</option>
+                  <option value="JP">Japan (MIC Giteki Radio Law, PSE Denan)</option>
+                  <option value="CN">China (CCC Compulsory, SRRC Radio, China RoHS)</option>
+                  <option value="LATAM">Latin America (Anatel / NOM / Subtel)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Primary Consumer Language:</label>
+                <select id="userguide-lang-select">
+                  <option value="en" selected>English</option>
+                  <option value="es">Español (Spanish)</option>
+                  <option value="fr">Français (French)</option>
+                  <option value="de">Deutsch (German)</option>
+                  <option value="ja">日本語 (Japanese)</option>
+                  <option value="zh">中文 (Mandarin)</option>
+                </select>
+              </div>
+            </div>
+
+            <button id="btn-generate-userguide" class="btn btn-primary margin-top">
+              <span>⚡ Generate Localized Manual & Compliance Insert</span>
+            </button>
+
+            <div id="userguide-output-box" class="details-list margin-top">
+              <div class="text-muted">Click "Generate Localized Manual" to synthesize localized quick start steps, environmental compliance notices, and certification marks.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- View 12: Export -->
         <section id="view-export" class="tab-view">
           <div class="card text-center">
             <div class="export-hero">
