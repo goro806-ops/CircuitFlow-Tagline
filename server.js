@@ -16,6 +16,10 @@ const consumerEngine = require('./src/engine/consumer');
 const negotiatorEngine = require('./src/engine/negotiator');
 const userguideEngine = require('./src/engine/userguide');
 const dbEngine = require('./src/engine/db');
+const aiBrainEngine = require('./src/engine/ai_brain');
+const kicadEngine = require('./src/engine/kicad');
+const liveCompEngine = require('./src/engine/live_components');
+const ngspiceEngine = require('./src/engine/ngspice');
 const exportEngine = require('./src/engine/export');
 
 const app = express();
@@ -26,11 +30,32 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // API Routes
-app.post('/api/generate/architecture', (req, res) => {
+app.post('/api/generate/architecture', async (req, res) => {
   try {
-    const { prompt, constraints } = req.body;
+    const { prompt, constraints, apiKey, provider } = req.body;
+    const aiResult = await aiBrainEngine.synthesizeWithAIBrain(prompt, apiKey, provider);
     const arch = architectureEngine.generateArchitecture(prompt, constraints);
-    res.json({ success: true, architecture: arch });
+    res.json({ success: true, architecture: arch, aiBrain: aiResult });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/generate/kicad', (req, res) => {
+  try {
+    const designData = req.body || {};
+    const kicadProject = kicadEngine.generateKiCadProject(designData);
+    res.json({ success: true, kicad: kicadProject });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/components/search', async (req, res) => {
+  try {
+    const query = req.query.q || 'BLE';
+    const results = await liveCompEngine.searchLiveComponents(query);
+    res.json({ success: true, components: results });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

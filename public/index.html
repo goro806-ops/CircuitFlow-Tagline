@@ -98,6 +98,24 @@
               <button class="btn-preset" data-preset="rp2040_display">RP2040 Smart Display</button>
             </div>
 
+            <div class="card margin-top" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color);">
+              <h4>🧠 LLM Generative Hardware Brain Config (Optional API Key)</h4>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>AI LLM Provider:</label>
+                  <select id="select-ai-provider">
+                    <option value="openai" selected>OpenAI (GPT-4o)</option>
+                    <option value="deepseek">DeepSeek (DeepSeek-V3)</option>
+                    <option value="neural-heuristic">CircuitFlow Neural Heuristic (Free/Built-in)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>API Key (Optional for Neural Heuristic):</label>
+                  <input type="password" id="input-ai-key" placeholder="sk-proj-xxxxxxxxxxxxxxxxxxxx">
+                </div>
+              </div>
+            </div>
+
             <h3 class="margin-top">2. Target Consumer Characteristics & Environmental Specs</h3>
             <div class="form-row">
               <div class="form-group">

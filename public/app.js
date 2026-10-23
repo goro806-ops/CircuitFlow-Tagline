@@ -159,6 +159,9 @@ document.addEventListener('DOMContentLoaded', () => {
     btnGenerateAll.textContent = '⚡ Synthesizing Consumer Profile & Architecture...';
 
     try {
+      const provider = document.getElementById('select-ai-provider')?.value || 'openai';
+      const apiKey = document.getElementById('input-ai-key')?.value || '';
+
       // 1. Consumer Profile
       const consumerRes = await fetch('/api/generate/consumer', {
         method: 'POST',
@@ -169,15 +172,16 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.consumer = consumerData.consumer;
       renderConsumerProfile(consumerData.consumer);
 
-      // 2. Architecture
+      // 2. Architecture & AI Brain Reasoning
       const archRes = await fetch('/api/generate/architecture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, constraints: { maxBOMCostUSD: maxCost } })
+        body: JSON.stringify({ prompt, constraints: { maxBOMCostUSD: maxCost }, apiKey, provider })
       });
       const archData = await archRes.json();
       projectData.architecture = archData.architecture;
-      renderArchitecture(archData.architecture);
+      projectData.aiBrain = archData.aiBrain;
+      renderArchitecture(archData.architecture, archData.aiBrain);
 
       // 3. Multi-Board Subsystems
       btnGenerateAll.textContent = '⚡ Analyzing Multi-Board Subsystem Split...';
