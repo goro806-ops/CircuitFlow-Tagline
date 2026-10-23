@@ -14,6 +14,7 @@ const distributorEngine = require('./src/engine/distributor');
 const multiboardEngine = require('./src/engine/multiboard');
 const consumerEngine = require('./src/engine/consumer');
 const negotiatorEngine = require('./src/engine/negotiator');
+const userguideEngine = require('./src/engine/userguide');
 const exportEngine = require('./src/engine/export');
 
 const app = express();
@@ -29,6 +30,16 @@ app.post('/api/generate/architecture', (req, res) => {
     const { prompt, constraints } = req.body;
     const arch = architectureEngine.generateArchitecture(prompt, constraints);
     res.json({ success: true, architecture: arch });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/generate/userguide', (req, res) => {
+  try {
+    const guideParams = req.body || {};
+    const userguide = userguideEngine.generateUserGuide(guideParams);
+    res.json({ success: true, userguide });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

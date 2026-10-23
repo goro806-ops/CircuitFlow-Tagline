@@ -35,7 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
     enclosure: { title: '8. 3D Parametric CAD Enclosure & Shape Customization', subtitle: 'Custom shape tuning & AI Multi-Physics Design Conflict Negotiator.' },
     render: { title: '9. 3D Studio Render & 360 Disassembly View', subtitle: '360° orbital rotation & exploded disassembly view.' },
     testfixture: { title: '10. Factory Bed-of-Nails Test Jig', subtitle: 'Automated pogo-pin test point map & factory QA fixture CAD.' },
-    export: { title: '11. Production Package Launch', subtitle: 'Download turn-key production release package zip archive.' }
+    userguide: { title: '11. Localized Consumer User Guide & Safety Manual', subtitle: 'Generate region-specific, multi-language quick start guides, compliance leaflets, and packaging inserts.' },
+    export: { title: '12. Production Package Launch', subtitle: 'Download turn-key production release package zip archive.' }
   };
 
   navItems.forEach(item => {
@@ -275,6 +276,24 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.testfixture = tfData.testfixture;
       renderTestFixture(tfData.testfixture);
 
+      // 11. Consumer User Guide & Localization
+      btnGenerateAll.textContent = '⚡ Generating Localized Consumer User Guide...';
+      const ugRes = await fetch('/api/generate/userguide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productName: projectData.architecture?.deviceConcept || 'CircuitFlow Smart Device',
+          consumerProfile: projectData.consumer?.profileType || 'outdoor_sports',
+          region: document.getElementById('userguide-region-select')?.value || 'US',
+          language: document.getElementById('userguide-lang-select')?.value || 'en',
+          ipRating: projectData.consumer?.ipRating || 'IP68',
+          batteryCapacity: projectData.architecture?.powerSystem?.type || '1200 mAh Li-Po'
+        })
+      });
+      const ugData = await ugRes.json();
+      projectData.userguide = ugData.userguide;
+      renderUserGuide(ugData.userguide);
+
       btnGenerateAll.disabled = false;
       btnGenerateAll.textContent = '⚡ Generation Complete! Click tabs to inspect.';
       btnExportPkg.disabled = false;
@@ -474,5 +493,64 @@ document.addEventListener('DOMContentLoaded', () => {
       ${tfData.testPoints.map(tp => `<p>📍 <strong>${tp.id}:</strong> ${tp.name} (${tp.x}mm, ${tp.y}mm)</p>`).join('')}
     `;
     document.getElementById('testfixture-scad-code').textContent = tfData.cadFiles['pogo_test_jig.scad'];
+  }
+
+  // User Guide Generation Event & Render
+  const btnGenUserGuide = document.getElementById('btn-generate-userguide');
+  if (btnGenUserGuide) {
+    btnGenUserGuide.addEventListener('click', async () => {
+      const region = document.getElementById('userguide-region-select').value;
+      const language = document.getElementById('userguide-lang-select').value;
+
+      try {
+        const res = await fetch('/api/generate/userguide', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productName: projectData.architecture?.mcu?.name ? `${projectData.architecture.mcu.name} Device` : 'CircuitFlow Smart Wearable',
+            consumerProfile: projectData.consumer?.profileType || 'outdoor_sports',
+            region,
+            language,
+            ipRating: projectData.consumer?.ipRating || 'IP68'
+          })
+        });
+        const data = await res.json();
+        projectData.userguide = data.userguide;
+        renderUserGuide(data.userguide);
+      } catch (err) {
+        alert('User guide generation failed: ' + err.message);
+      }
+    });
+  }
+
+  function renderUserGuide(guide) {
+    if (!guide) return;
+    const box = document.getElementById('userguide-output-box');
+    if (!box) return;
+
+    box.innerHTML = `
+      <div style="background: rgba(255,255,255,0.03); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <h3 style="color: var(--accent-color); margin-bottom: 8px;">📖 ${guide.localizedTitle}</h3>
+        <p><strong>Target Region:</strong> ${guide.regulatorySection.regionName} | <strong>Language Code:</strong> ${guide.language.toUpperCase()}</p>
+
+        <h4 class="margin-top" style="color: var(--text-heading);">📦 ${guide.unboxingSection.header}</h4>
+        <ul>${guide.unboxingSection.items.map(item => `<li>${item}</li>`).join('')}</ul>
+
+        <h4 class="margin-top" style="color: var(--text-heading);">🚀 ${guide.quickStartSection.header}</h4>
+        <ol>${guide.quickStartSection.steps.map(step => `<li>${step}</li>`).join('')}</ol>
+
+        <h4 class="margin-top" style="color: var(--text-heading);">⚠️ ${guide.safetySection.header}</h4>
+        <ul>${guide.safetySection.warnings.map(warn => `<li>${warn}</li>`).join('')}</ul>
+
+        <h4 class="margin-top" style="color: var(--text-heading);">🏛️ ${guide.regulatorySection.header}</h4>
+        <p><strong>Applicable Certification Standards:</strong> ${guide.regulatorySection.applicableStandards.join(', ')}</p>
+        <p><strong>Required Certification Logos:</strong> ${guide.regulatorySection.requiredCertificationMarks.join(' | ')}</p>
+        <p class="margin-top"><em>${guide.regulatorySection.legalDisclaimer}</em></p>
+
+        <div class="margin-top" style="padding: 10px; background: rgba(0, 210, 255, 0.08); border-radius: 6px;">
+          <strong>📄 Packaging Insert Layout Spec:</strong> ${guide.packagingInsertLayout.dimensions} (${guide.packagingInsertLayout.paperWeight})
+        </div>
+      </div>
+    `;
   }
 });
