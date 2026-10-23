@@ -1,0 +1,28 @@
+{
+  "name": "circuitflow-platform",
+  "version": "1.0.0",
+  "description": "CircuitFlow - Autonomous Electronics Design & Manufacturing SaaS Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/engine.test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "archiver": "^7.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "keywords": [
+    "eda",
+    "pcb",
+    "hardware",
+    "firmware",
+    "saas",
+    "manufacturing"
+  ],
+  "author": "CircuitFlow Team",
+  "license": "MIT"
+}
