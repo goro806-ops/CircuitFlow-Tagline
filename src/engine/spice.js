@@ -3,11 +3,11 @@
  * CircuitFlow Platform
  */
 
-function runSimulationAndThermal(architecture = {}, bom = {}) {
+function runSimulationAndThermal(architecture = {}, bom = {}, consumer = {}, shape = {}) {
   const mcuName = architecture.mcu ? architecture.mcu.name : 'ESP32-S3';
   const totalPower_mW = architecture.powerBudget ? architecture.powerBudget.totalPower_mW : 165;
 
-  // SPICE Netlist Simulation Results
+  // SPICE Netlist Simulation
   const spiceNetlist = `* CircuitFlow SPICE Operating Point Simulation
 V_USB VBUS 0 DC 5.0V
 U_REG VBUS VCC 0 AMS1117_3V3
@@ -26,13 +26,24 @@ R_PULLUP_SCL VCC SCL 4.7k
     'GND': '0.00 V'
   };
 
-  // Thermal Dissipation Analysis
-  const ambientTemp_C = 25.0;
-  const regPower_mW = (5.0 - 3.3) * (totalPower_mW / 3.3); // Power dissipated in LDO regulator
+  // Ambient temperature derived from consumer profile
+  let ambientTemp_C = 25.0;
+  if (consumer.operatingTempRange_C) {
+    const parts = consumer.operatingTempRange_C.split('to');
+    if (parts.length > 1) {
+      ambientTemp_C = parseFloat(parts[1].trim());
+    }
+  }
+
+  // Thermal Dissipation Analysis factoring Enclosure Geometry
+  const height_mm = shape.height_mm !== undefined ? shape.height_mm : 12.0;
+  const thermalResistanceMultiplier = height_mm < 10.0 ? 1.6 : 1.0; // Reduced airflow increases thermal resistance
+
+  const regPower_mW = (5.0 - 3.3) * (totalPower_mW / 3.3);
   const mcuPower_mW = 0.8 * totalPower_mW;
 
-  const mcuJunctionTemp_C = parseFloat((ambientTemp_C + (mcuPower_mW * 0.045)).toFixed(1));
-  const regJunctionTemp_C = parseFloat((ambientTemp_C + (regPower_mW * 0.085)).toFixed(1));
+  const mcuJunctionTemp_C = parseFloat((ambientTemp_C + (mcuPower_mW * 0.045 * thermalResistanceMultiplier)).toFixed(1));
+  const regJunctionTemp_C = parseFloat((ambientTemp_C + (regPower_mW * 0.085 * thermalResistanceMultiplier)).toFixed(1));
 
   const thermalHotspots = [
     {
@@ -58,7 +69,7 @@ R_PULLUP_SCL VCC SCL 4.7k
       ambientTemp_C,
       maxSystemTemp_C: Math.max(mcuJunctionTemp_C, regJunctionTemp_C),
       thermalHotspots,
-      coolingRecommendation: regJunctionTemp_C > 70 ? 'Copper thermal vias under LDO ground tab recommended' : 'Standard PCB copper pour adequate'
+      coolingRecommendation: regJunctionTemp_C > 75 ? 'Perimeter heat sink fins or thermal vias under LDO required' : 'Standard PCB copper pour adequate'
     }
   };
 }

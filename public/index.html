@@ -22,7 +22,7 @@
 
       <nav class="nav-menu">
         <button class="nav-item active" data-tab="prompt">
-          <span class="icon">💡</span> 1. Concept & Vision
+          <span class="icon">💡</span> 1. Concept & Consumer Profile
         </button>
         <button class="nav-item" data-tab="architecture">
           <span class="icon">🧩</span> 2. Architecture
@@ -43,7 +43,7 @@
           <span class="icon">⚡</span> 7. Firmware & HAL
         </button>
         <button class="nav-item" data-tab="enclosure">
-          <span class="icon">📦</span> 8. 3D Enclosure
+          <span class="icon">📦</span> 8. 3D Enclosure & Shapes
         </button>
         <button class="nav-item" data-tab="render">
           <span class="icon">🎨</span> 9. 3D Studio & 360 View
@@ -68,8 +68,8 @@
       <!-- Header -->
       <header class="top-header">
         <div class="header-title">
-          <h2 id="current-tab-title">1. Device Concept & Vision</h2>
-          <p id="current-tab-subtitle">Describe your electronic device specs or select an example prompt.</p>
+          <h2 id="current-tab-title">1. Device Concept & Consumer Target Profile</h2>
+          <p id="current-tab-subtitle">Describe your electronic device specs and select target consumer characteristics.</p>
         </div>
         <div class="header-actions">
           <button id="btn-export-pkg" class="btn btn-primary" disabled>
@@ -83,7 +83,7 @@
         <!-- View 1: Concept & Prompt -->
         <section id="view-prompt" class="tab-view active">
           <div class="card">
-            <h3>Describe Your Electronic Device</h3>
+            <h3>1. Describe Your Electronic Device</h3>
             <textarea id="prompt-input" placeholder="E.g. A battery-powered BLE wearable fitness tracker with a 6-axis IMU, OLED screen, and USB-C recharging..."></textarea>
 
             <div class="prompt-presets">
@@ -93,22 +93,24 @@
               <button class="btn-preset" data-preset="rp2040_display">RP2040 Smart Display</button>
             </div>
 
+            <h3 class="margin-top">2. Target Consumer Characteristics & Environmental Specs</h3>
             <div class="form-row">
+              <div class="form-group">
+                <label>Target Consumer Profile:</label>
+                <select id="consumer-profile-select">
+                  <option value="outdoor_sports" selected>Extreme Outdoor / Ruggedized (IP68, 3M Drop Test)</option>
+                  <option value="children">Children / Educational (IP54, Tamper-proof Screws)</option>
+                  <option value="healthcare">Medical / Patient Wearable (IP67, Skin-Safe TPU)</option>
+                  <option value="industrial_tech">Industrial Field Technician (IP65, -40 to +85°C)</option>
+                </select>
+              </div>
               <div class="form-group">
                 <label>Target Unit Cost Limit ($USD):</label>
                 <input type="number" id="cost-constraint" value="25" min="5" max="500">
               </div>
-              <div class="form-group">
-                <label>Form Factor Target:</label>
-                <select id="form-factor">
-                  <option value="wearable">Compact Wearable (&lt; 40mm)</option>
-                  <option value="standard" selected>Standard IoT Board (&lt; 80mm)</option>
-                  <option value="industrial">Industrial Enclosed Module</option>
-                </select>
-              </div>
             </div>
 
-            <button id="btn-generate-all" class="btn btn-accent btn-large">
+            <button id="btn-generate-all" class="btn btn-accent btn-large margin-top">
               <span>⚡ Generate Complete Hardware Package</span>
             </button>
           </div>
@@ -122,8 +124,8 @@
               <div id="arch-mcu-details" class="details-list">No data generated yet.</div>
             </div>
             <div class="card">
-              <h3>Power Budget & Consumption</h3>
-              <div id="arch-power-budget" class="details-list">No data generated yet.</div>
+              <h3>Consumer Environmental & Material Specs</h3>
+              <div id="consumer-specs-details" class="details-list">No consumer profile data yet.</div>
             </div>
           </div>
           <div class="card margin-top">
@@ -215,8 +217,37 @@
           </div>
         </section>
 
-        <!-- View 8: Enclosure -->
+        <!-- View 8: Enclosure & Shape Customization -->
         <section id="view-enclosure" class="tab-view">
+          <div class="card">
+            <div class="card-header-flex">
+              <h3>Custom Shape Customization & Physics Audit</h3>
+              <button id="btn-run-shape-negotiator" class="btn btn-primary">⚡ Audit & Negotiate Shape Changes</button>
+            </div>
+            <div class="form-row margin-top">
+              <div class="form-group">
+                <label>Enclosure Target Height (mm):</label>
+                <input type="number" id="input-shape-height" value="8.0" step="0.5" min="4" max="50">
+              </div>
+              <div class="form-group">
+                <label>Wall Thickness (mm):</label>
+                <input type="number" id="input-shape-wall" value="1.0" step="0.1" min="0.5" max="10">
+              </div>
+              <div class="form-group">
+                <label>Air Ventilation Grilles:</label>
+                <select id="select-shape-vents">
+                  <option value="true" selected>Open Side Vent Grilles (Airflow)</option>
+                  <option value="false">Sealed Outer Shell (Waterproof)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- AI Negotiator Audit Results -->
+            <div id="negotiation-results-box" class="negotiator-box margin-top">
+              <div class="text-muted">Modify shape parameters above and click "Audit & Negotiate Shape Changes" to evaluate thermal & structural health.</div>
+            </div>
+          </div>
+
           <div class="grid-2col">
             <div class="card">
               <h3>3D Parametric CAD Enclosure Specs</h3>
@@ -263,7 +294,7 @@
             <div class="export-hero">
               <div class="hero-icon">📦</div>
               <h2>Production Release Package Ready</h2>
-              <p>Download turn-key Gerbers, Pick-and-Place, BOM CSVs, Firmware C/C++, CAD STEP/STL, 360 Studio Renders, SPICE Reports, Distributor Quotes, and Factory Test Fixtures in one single ZIP archive.</p>
+              <p>Download turn-key Gerbers, Pick-and-Place, BOM CSVs, Firmware C/C++, CAD STEP/STL, 360 Studio Renders, SPICE Reports, Consumer Profile Audits, and Factory Test Fixtures in one single ZIP archive.</p>
               <button id="btn-download-zip" class="btn btn-accent btn-large margin-top">
                 <span>📥 Download Complete Production Package (.ZIP)</span>
               </button>

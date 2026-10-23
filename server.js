@@ -12,6 +12,8 @@ const testfixtureEngine = require('./src/engine/testfixture');
 const spiceEngine = require('./src/engine/spice');
 const distributorEngine = require('./src/engine/distributor');
 const multiboardEngine = require('./src/engine/multiboard');
+const consumerEngine = require('./src/engine/consumer');
+const negotiatorEngine = require('./src/engine/negotiator');
 const exportEngine = require('./src/engine/export');
 
 const app = express();
@@ -27,6 +29,26 @@ app.post('/api/generate/architecture', (req, res) => {
     const { prompt, constraints } = req.body;
     const arch = architectureEngine.generateArchitecture(prompt, constraints);
     res.json({ success: true, architecture: arch });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/generate/consumer', (req, res) => {
+  try {
+    const { profileType, customOverrides } = req.body;
+    const consumer = consumerEngine.processConsumerProfile(profileType, customOverrides);
+    res.json({ success: true, consumer });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/generate/negotiate', (req, res) => {
+  try {
+    const { currentDesign, requestedShapeChange } = req.body;
+    const negotiation = negotiatorEngine.evaluateShapeChangeAndNegotiate(currentDesign, requestedShapeChange);
+    res.json({ success: true, negotiation });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -64,8 +86,8 @@ app.post('/api/generate/firmware', (req, res) => {
 
 app.post('/api/generate/enclosure', (req, res) => {
   try {
-    const { pcb } = req.body;
-    const enclosure = enclosureEngine.generateEnclosure(pcb);
+    const { pcb, consumer, options } = req.body;
+    const enclosure = enclosureEngine.generateEnclosure(pcb, consumer, options);
     res.json({ success: true, enclosure });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -94,8 +116,8 @@ app.post('/api/generate/testfixture', (req, res) => {
 
 app.post('/api/generate/spice', (req, res) => {
   try {
-    const { architecture, bom } = req.body;
-    const spice = spiceEngine.runSimulationAndThermal(architecture, bom);
+    const { architecture, bom, consumer, shape } = req.body;
+    const spice = spiceEngine.runSimulationAndThermal(architecture, bom, consumer, shape);
     res.json({ success: true, spice });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
