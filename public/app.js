@@ -439,19 +439,81 @@ document.addEventListener('DOMContentLoaded', () => {
       <p><strong>Generated Gerber Layers:</strong> ${Object.keys(pcb.gerberFiles).join(', ')}</p>
     `;
 
-    const pcbCanvas = document.getElementById('pcb-canvas');
-    pcbCanvas.innerHTML = '';
-    const board = document.createElement('div');
-    board.style.cssText = `width:${pcb.boardDimensions.width_mm * 3}px; height:${pcb.boardDimensions.height_mm * 3}px; background:#064e3b; border:2px solid #10b981; position:relative; border-radius:6px;`;
+    // 3D WebGL Three.js PCB Renderer
+    const container = document.getElementById('pcb-3d-webgl-canvas');
+    if (!container) return;
+    container.innerHTML = '';
 
-    pcb.placedComponents.forEach(comp => {
-      const cBox = document.createElement('div');
-      cBox.style.cssText = `position:absolute; background:#3b82f6; color:#fff; font-size:9px; padding:2px; border-radius:2px; transform:translate(-50%, -50%); left:${50 + (comp.x * 2)}%; top:${50 + (comp.y * 2)}%;`;
-      cBox.textContent = comp.designator;
-      board.appendChild(cBox);
+    if (typeof THREE === 'undefined') {
+      container.innerHTML = '<div style="padding:20px; color:#ef4444;">Three.js library missing</div>';
+      return;
+    }
+
+    const width = container.clientWidth || 500;
+    const height = container.clientHeight || 360;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x020617);
+
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    camera.position.set(0, 40, 60);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+    container.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(20, 50, 30);
+    scene.add(dirLight);
+
+    // Green FR4 PCB Substrate Board
+    const bW = pcb.boardDimensions.width_mm;
+    const bH = pcb.boardDimensions.height_mm;
+    const boardGeo = new THREE.BoxGeometry(bW, 1.6, bH);
+    const boardMat = new THREE.MeshStandardMaterial({ color: 0x065f46, roughness: 0.3, metalness: 0.1 });
+    const boardMesh = new THREE.Mesh(boardGeo, boardMat);
+    scene.add(boardMesh);
+
+    // Gold/Copper Traces
+    const traceGeo = new THREE.BoxGeometry(bW * 0.8, 0.1, 0.5);
+    const traceMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.2, metalness: 0.8 });
+    const trace1 = new THREE.Mesh(traceGeo, traceMat);
+    trace1.position.set(0, 0.85, 0);
+    scene.add(trace1);
+
+    // Render Placed 3D Components
+    pcb.placedComponents.forEach((comp, idx) => {
+      const compW = comp.package.includes('QFN') ? 6 : comp.package.includes('0603') ? 2 : 4;
+      const compH = comp.package.includes('QFN') ? 1.2 : 1.0;
+      const compGeo = new THREE.BoxGeometry(compW, compH, compW);
+      const isMCU = comp.designator.startsWith('U');
+      const compMat = new THREE.MeshStandardMaterial({
+        color: isMCU ? 0x1e293b : 0x3b82f6,
+        roughness: 0.4
+      });
+      const compMesh = new THREE.Mesh(compGeo, compMat);
+      compMesh.position.set(comp.x * 0.8, 0.8 + (compH / 2), comp.y * 0.8);
+      scene.add(compMesh);
     });
 
-    pcbCanvas.appendChild(board);
+    // Animation Loop
+    let animId;
+    function animate() {
+      animId = requestAnimationFrame(animate);
+      boardMesh.rotation.y += 0.005;
+      trace1.rotation.y += 0.005;
+      scene.children.forEach(child => {
+        if (child.geometry instanceof THREE.BoxGeometry && child !== boardMesh && child !== trace1) {
+          child.rotation.y += 0.005;
+        }
+      });
+      renderer.render(scene, camera);
+    }
+    animate();
   }
 
   function renderSpiceAndThermal(spiceData) {

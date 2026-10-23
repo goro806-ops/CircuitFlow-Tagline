@@ -16,6 +16,7 @@ const multiboardEngine = require('../src/engine/multiboard');
 const consumerEngine = require('../src/engine/consumer');
 const negotiatorEngine = require('../src/engine/negotiator');
 const userguideEngine = require('../src/engine/userguide');
+const dbEngine = require('../src/engine/db');
 const exportEngine = require('../src/engine/export');
 
 async function runTests() {
@@ -131,7 +132,19 @@ async function runTests() {
   assert.ok(guide.regulatorySection.applicableStandards.includes('CE RED 2014/53/EU'));
   console.log('✓ Localized Consumer User Guide Engine Passed!');
 
-  // Test 14: Production Package Bundler Engine
+  // Test 14: Project Storage Database Engine
+  console.log('Testing Project Storage Database Engine...');
+  const projRecord = dbEngine.saveProject({
+    architecture: arch,
+    consumer,
+    bom
+  });
+  assert.ok(projRecord.id.startsWith('proj_'));
+  assert.strictEqual(dbEngine.getProjectById(projRecord.id).id, projRecord.id);
+  assert.ok(dbEngine.listProjects().length >= 1);
+  console.log('✓ Project Storage Database Engine Passed!');
+
+  // Test 15: Production Package Bundler Engine
   console.log('Testing Production Release Package Exporter...');
   const zipBuffer = await exportEngine.bundleReleasePackage({
     architecture: arch,

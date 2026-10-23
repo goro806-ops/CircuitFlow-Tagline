@@ -15,6 +15,7 @@ const multiboardEngine = require('./src/engine/multiboard');
 const consumerEngine = require('./src/engine/consumer');
 const negotiatorEngine = require('./src/engine/negotiator');
 const userguideEngine = require('./src/engine/userguide');
+const dbEngine = require('./src/engine/db');
 const exportEngine = require('./src/engine/export');
 
 const app = express();
@@ -30,6 +31,38 @@ app.post('/api/generate/architecture', (req, res) => {
     const { prompt, constraints } = req.body;
     const arch = architectureEngine.generateArchitecture(prompt, constraints);
     res.json({ success: true, architecture: arch });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Database & Project Persistence Endpoints
+app.post('/api/projects/save', (req, res) => {
+  try {
+    const projectData = req.body || {};
+    const record = dbEngine.saveProject(projectData);
+    res.json({ success: true, project: record });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/projects/list', (req, res) => {
+  try {
+    const projects = dbEngine.listProjects();
+    res.json({ success: true, projects });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/projects/:id', (req, res) => {
+  try {
+    const project = dbEngine.getProjectById(req.params.id);
+    if (!project) {
+      return res.status(444).json({ success: false, error: 'Project not found' });
+    }
+    res.json({ success: true, project });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+*.md
+tests
+/home/jules
+*.log
+.DS_Store
