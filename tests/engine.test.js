@@ -8,10 +8,15 @@ const bomEngine = require('../src/engine/bom');
 const pcbEngine = require('../src/engine/pcb');
 const firmwareEngine = require('../src/engine/firmware');
 const enclosureEngine = require('../src/engine/enclosure');
+const renderEngine = require('../src/engine/render');
+const testfixtureEngine = require('../src/engine/testfixture');
+const spiceEngine = require('../src/engine/spice');
+const distributorEngine = require('../src/engine/distributor');
+const multiboardEngine = require('../src/engine/multiboard');
 const exportEngine = require('../src/engine/export');
 
 async function runTests() {
-  console.log('--- RUNNING CIRCUITFLOW ENGINE TEST SUITE ---');
+  console.log('--- RUNNING CIRCUITFLOW ALL-ENGINE TEST SUITE ---');
 
   // Test 1: Architecture Engine
   console.log('Testing Architecture Engine...');
@@ -52,22 +57,64 @@ async function runTests() {
   assert.ok(enc.cadFiles['enclosure_bottom.stl'], 'STL output present');
   console.log('✓ Enclosure Engine Passed!');
 
-  // Test 6: Production Package Bundler Engine
+  // Test 6: 3D Render Engine with Disassembly 360 View
+  console.log('Testing 3D Photorealistic Render Engine (Orbit 360 & Disassembly)...');
+  const renderNormal = renderEngine.generate3DRender(pcb, enc, { exploded: false, rotation: 45 });
+  const renderExploded = renderEngine.generate3DRender(pcb, enc, { exploded: true, rotation: 180 });
+  assert.ok(renderNormal.svgRenderAsset.includes('rotate(45)'), 'Rotation angle applied');
+  assert.ok(renderExploded.svgRenderAsset.includes('Disassembled View'), 'Disassembly view generated');
+  console.log('✓ 3D Photorealistic Render Engine Passed!');
+
+  // Test 7: Bed-of-Nails Test Fixture Engine
+  console.log('Testing Factory Bed-of-Nails Test Fixture Engine...');
+  const tf = testfixtureEngine.generateTestFixture(pcb);
+  assert.ok(tf.testPointCount >= 4, 'At least 4 test points generated');
+  assert.ok(tf.cadFiles['pogo_test_jig.scad'], 'Pogo pin CAD script generated');
+  console.log('✓ Factory Test Fixture Engine Passed!');
+
+  // Test 8: SPICE & Thermal Engine
+  console.log('Testing SPICE Simulation & Thermal Analysis Engine...');
+  const spice = spiceEngine.runSimulationAndThermal(arch, bom);
+  assert.ok(spice.spiceNetlist.includes('.OP'), 'SPICE netlist contains OP card');
+  assert.ok(spice.thermalAnalysis.thermalHotspots.length > 0, 'Hotspots calculated');
+  console.log('✓ SPICE Simulation & Thermal Analysis Engine Passed!');
+
+  // Test 9: Distributor Engine
+  console.log('Testing Live Distributor Cart Sync & Turnkey Quotes Engine...');
+  const dist = distributorEngine.generateDistributorQuotes(bom, pcb);
+  assert.ok(dist.distributorCarts.length >= 2, 'Carts generated for DigiKey & Mouser');
+  assert.ok(dist.turnkeyQuotes.length >= 2, 'Turnkey quotes generated for JLCPCB & PCBWay');
+  console.log('✓ Live Distributor Cart Sync Engine Passed!');
+
+  // Test 10: Multi-Board System Engine
+  console.log('Testing Multi-Board & Flex-Rigid System Engine...');
+  const mb = multiboardEngine.generateMultiBoardSystem(arch);
+  assert.strictEqual(mb.isMultiBoardSystem, true);
+  assert.ok(mb.subBoards.length >= 2, 'Multiple sub-boards generated');
+  assert.ok(mb.interconnections[0].type.includes('FPC'), 'Flex ribbon connection present');
+  console.log('✓ Multi-Board & Flex-Rigid System Engine Passed!');
+
+  // Test 11: Production Package Bundler Engine
   console.log('Testing Production Release Package Exporter...');
   const zipBuffer = await exportEngine.bundleReleasePackage({
     architecture: arch,
     bom,
     pcb,
     firmware: fw,
-    enclosure: enc
+    enclosure: enc,
+    render: renderExploded,
+    testfixture: tf,
+    spice,
+    distributor: dist,
+    multiboard: mb
   });
   assert.ok(Buffer.isBuffer(zipBuffer), 'Release package output should be a Buffer');
-  assert.ok(zipBuffer.length > 500, 'Zip buffer should contain archive content');
+  assert.ok(zipBuffer.length > 1500, 'Zip buffer should contain full archive content');
   console.log('✓ Production Release Package Exporter Passed!');
 
-  console.log('\n==========================================');
-  console.log(' ALL 6 CIRCUITFLOW ENGINE TESTS PASSED! 🎉');
-  console.log('==========================================');
+  console.log('\n=============================================================');
+  console.log(' ALL 11 CIRCUITFLOW ENGINE MODULE TESTS PASSED CLEANLY! 🎉');
+  console.log('=============================================================');
 }
 
 if (require.main === module) {

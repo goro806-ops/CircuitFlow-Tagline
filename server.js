@@ -7,6 +7,11 @@ const bomEngine = require('./src/engine/bom');
 const pcbEngine = require('./src/engine/pcb');
 const firmwareEngine = require('./src/engine/firmware');
 const enclosureEngine = require('./src/engine/enclosure');
+const renderEngine = require('./src/engine/render');
+const testfixtureEngine = require('./src/engine/testfixture');
+const spiceEngine = require('./src/engine/spice');
+const distributorEngine = require('./src/engine/distributor');
+const multiboardEngine = require('./src/engine/multiboard');
 const exportEngine = require('./src/engine/export');
 
 const app = express();
@@ -62,6 +67,56 @@ app.post('/api/generate/enclosure', (req, res) => {
     const { pcb } = req.body;
     const enclosure = enclosureEngine.generateEnclosure(pcb);
     res.json({ success: true, enclosure });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/generate/render', (req, res) => {
+  try {
+    const { pcb, enclosure, options } = req.body;
+    const render = renderEngine.generate3DRender(pcb, enclosure, options);
+    res.json({ success: true, render });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/generate/testfixture', (req, res) => {
+  try {
+    const { pcb } = req.body;
+    const testfixture = testfixtureEngine.generateTestFixture(pcb);
+    res.json({ success: true, testfixture });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/generate/spice', (req, res) => {
+  try {
+    const { architecture, bom } = req.body;
+    const spice = spiceEngine.runSimulationAndThermal(architecture, bom);
+    res.json({ success: true, spice });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/generate/distributor', (req, res) => {
+  try {
+    const { bom, pcb } = req.body;
+    const distributor = distributorEngine.generateDistributorQuotes(bom, pcb);
+    res.json({ success: true, distributor });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/generate/multiboard', (req, res) => {
+  try {
+    const { architecture } = req.body;
+    const multiboard = multiboardEngine.generateMultiBoardSystem(architecture);
+    res.json({ success: true, multiboard });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

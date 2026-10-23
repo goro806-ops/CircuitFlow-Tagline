@@ -8,7 +8,12 @@ document.addEventListener('DOMContentLoaded', () => {
     bom: null,
     pcb: null,
     firmware: null,
-    enclosure: null
+    enclosure: null,
+    render: null,
+    testfixture: null,
+    spice: null,
+    distributor: null,
+    multiboard: null
   };
 
   // Tab Navigation Elements
@@ -20,11 +25,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabTitlesMap = {
     prompt: { title: '1. Device Concept & Vision', subtitle: 'Specify your electronic device requirements or use a quick preset.' },
     architecture: { title: '2. Architecture & Topology', subtitle: 'View auto-selected MCU, peripherals, and power subsystem.' },
-    bom: { title: '3. Bill of Materials & Live Supply Chain', subtitle: 'Real-time component stock, lifecycle, and cost estimation.' },
-    pcb: { title: '4. PCB Placement & Layer Stackup', subtitle: '2D placement visualizer, layer stackup, and DRC pass check.' },
-    firmware: { title: '5. Auto-Generated Firmware & Drivers', subtitle: 'C/C++ Board Support Packages (BSP) and HAL drivers.' },
-    enclosure: { title: '6. 3D Parametric CAD Enclosure', subtitle: 'Custom 3D printable enclosure dimensions and OpenSCAD script.' },
-    export: { title: '7. Production Package Launch', subtitle: 'Download turn-key production release package zip archive.' }
+    multiboard: { title: '3. Multi-Board Systems', subtitle: 'Multi-board motherboard/daughterboard split & FPC ribbon links.' },
+    bom: { title: '4. Bill of Materials & Cart Sync', subtitle: 'Real-time component stock, lifecycle, and instant distributor cart sync.' },
+    pcb: { title: '5. PCB Placement & Layer Stackup', subtitle: '2D placement visualizer, layer stackup, and DRC pass check.' },
+    spice: { title: '6. SPICE Simulation & Thermal Analysis', subtitle: 'Nodal voltage checks and power thermal dissipation hotspots.' },
+    firmware: { title: '7. Auto-Generated Firmware & Drivers', subtitle: 'C/C++ Board Support Packages (BSP) and HAL drivers.' },
+    enclosure: { title: '8. 3D Parametric CAD Enclosure', subtitle: 'Custom 3D printable enclosure dimensions and OpenSCAD script.' },
+    render: { title: '9. 3D Studio Render & 360 Disassembly View', subtitle: '360° orbital rotation & exploded disassembly view.' },
+    testfixture: { title: '10. Factory Bed-of-Nails Test Jig', subtitle: 'Automated pogo-pin test point map & factory QA fixture CAD.' },
+    export: { title: '11. Production Package Launch', subtitle: 'Download turn-key production release package zip archive.' }
   };
 
   navItems.forEach(item => {
@@ -60,6 +69,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Interactive 360 Disassembly Controls
+  const chkExplode = document.getElementById('chk-explode-disassembly');
+  const slider360 = document.getElementById('slider-360-rotation');
+  const lbl360Deg = document.getElementById('lbl-360-deg');
+
+  const update3DRender = async () => {
+    if (!projectData.pcb || !projectData.enclosure) return;
+    const isExploded = chkExplode.checked;
+    const rotation = slider360.value;
+    lbl360Deg.textContent = `${rotation}°`;
+
+    try {
+      const renderRes = await fetch('/api/generate/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pcb: projectData.pcb, enclosure: projectData.enclosure, options: { exploded: isExploded, rotation } })
+      });
+      const renderData = await renderRes.json();
+      projectData.render = renderData.render;
+      renderProductRender(renderData.render);
+    } catch (err) {
+      console.error('3D Render update failed:', err);
+    }
+  };
+
+  chkExplode.addEventListener('change', update3DRender);
+  slider360.addEventListener('input', update3DRender);
+
   // Generate Action
   const btnGenerateAll = document.getElementById('btn-generate-all');
   const btnExportPkg = document.getElementById('btn-export-pkg');
@@ -83,8 +120,19 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.architecture = archData.architecture;
       renderArchitecture(archData.architecture);
 
-      // 2. BOM
-      btnGenerateAll.textContent = '⚡ Querying Live Supply Chain & BOM...';
+      // 2. Multi-Board Subsystems
+      btnGenerateAll.textContent = '⚡ Analyzing Multi-Board Subsystem Split...';
+      const mbRes = await fetch('/api/generate/multiboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ architecture: projectData.architecture })
+      });
+      const mbData = await mbRes.json();
+      projectData.multiboard = mbData.multiboard;
+      renderMultiBoard(mbData.multiboard);
+
+      // 3. BOM & Distributor Quotes
+      btnGenerateAll.textContent = '⚡ Querying Live Supply Chain & Distributor Carts...';
       const bomRes = await fetch('/api/generate/bom', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,7 +142,16 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.bom = bomData.bom;
       renderBOM(bomData.bom);
 
-      // 3. PCB
+      const distRes = await fetch('/api/generate/distributor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bom: projectData.bom, pcb: projectData.pcb })
+      });
+      const distData = await distRes.json();
+      projectData.distributor = distData.distributor;
+      renderDistributorQuotes(distData.distributor);
+
+      // 4. PCB
       btnGenerateAll.textContent = '⚡ Auto-Routing PCB & Generating Gerbers...';
       const pcbRes = await fetch('/api/generate/pcb', {
         method: 'POST',
@@ -105,7 +162,18 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.pcb = pcbData.pcb;
       renderPCB(pcbData.pcb);
 
-      // 4. Firmware
+      // 5. SPICE Simulation & Thermals
+      btnGenerateAll.textContent = '⚡ Running SPICE Simulation & Thermal Dissipation Analysis...';
+      const spiceRes = await fetch('/api/generate/spice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ architecture: projectData.architecture, bom: projectData.bom })
+      });
+      const spiceData = await spiceRes.json();
+      projectData.spice = spiceData.spice;
+      renderSpiceAndThermal(spiceData.spice);
+
+      // 6. Firmware
       btnGenerateAll.textContent = '⚡ Scaffolding C/C++ HAL Firmware...';
       const fwRes = await fetch('/api/generate/firmware', {
         method: 'POST',
@@ -116,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.firmware = fwData.firmware;
       renderFirmware(fwData.firmware);
 
-      // 5. Enclosure
+      // 7. Enclosure
       btnGenerateAll.textContent = '⚡ Synthesizing 3D Parametric CAD Enclosure...';
       const encRes = await fetch('/api/generate/enclosure', {
         method: 'POST',
@@ -126,6 +194,28 @@ document.addEventListener('DOMContentLoaded', () => {
       const encData = await encRes.json();
       projectData.enclosure = encData.enclosure;
       renderEnclosure(encData.enclosure);
+
+      // 8. Photorealistic Render (Exploded/Disassembly View Ready)
+      btnGenerateAll.textContent = '⚡ Generating 360° Studio Assembly Render...';
+      const renderRes = await fetch('/api/generate/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pcb: projectData.pcb, enclosure: projectData.enclosure, options: { exploded: chkExplode.checked, rotation: slider360.value } })
+      });
+      const renderData = await renderRes.json();
+      projectData.render = renderData.render;
+      renderProductRender(renderData.render);
+
+      // 9. Factory Test Fixture
+      btnGenerateAll.textContent = '⚡ Mapping Bed-of-Nails Test Fixture...';
+      const tfRes = await fetch('/api/generate/testfixture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pcb: projectData.pcb })
+      });
+      const tfData = await tfRes.json();
+      projectData.testfixture = tfData.testfixture;
+      renderTestFixture(tfData.testfixture);
 
       btnGenerateAll.disabled = false;
       btnGenerateAll.textContent = '⚡ Generation Complete! Click tabs to inspect.';
@@ -196,6 +286,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function renderMultiBoard(mbData) {
+    document.getElementById('multiboard-details').innerHTML = mbData.subBoards.map(b => `
+      <p><strong>${b.name} (${b.boardId}):</strong> ${b.type} | ${b.dimensions_mm.width}mm x ${b.dimensions_mm.height}mm</p>
+    `).join('');
+
+    document.getElementById('multiboard-connections').innerHTML = mbData.interconnections.map(c => `
+      <p>🔌 <strong>${c.type}:</strong> ${c.fromBoard} ➔ ${c.toBoard} (${c.pinCount}-pin, ${c.pitch_mm}mm pitch)</p>
+      <p><strong>Signals Passed:</strong> ${c.signalsPassed.join(', ')}</p>
+    `).join('');
+  }
+
   function renderBOM(bom) {
     document.getElementById('bom-summary-badge').textContent = `BOM Unit Cost: $${bom.summary.unitCostUSD} (${bom.summary.currency})`;
     const tbody = document.querySelector('#bom-table tbody');
@@ -216,6 +317,16 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       tbody.appendChild(tr);
     });
+  }
+
+  function renderDistributorQuotes(distData) {
+    const quotesBar = document.getElementById('distributor-quotes-bar');
+    quotesBar.innerHTML = distData.turnkeyQuotes.map(q => `
+      <div class="quote-card">
+        <p><strong>${q.manufacturer} Turnkey Quote (10 units):</strong> $${q.totalTurnkeyCostUSD} USD</p>
+        <p>Fab: $${q.pcbFabCostUSD} | Assembly Setup: $${q.pcbaAssemblySetupUSD} | Lead Time: ${q.turnaroundDays} days</p>
+      </div>
+    `).join('');
   }
 
   function renderPCB(pcb) {
@@ -241,6 +352,18 @@ document.addEventListener('DOMContentLoaded', () => {
     pcbCanvas.appendChild(board);
   }
 
+  function renderSpiceAndThermal(spiceData) {
+    document.getElementById('spice-node-details').innerHTML = Object.entries(spiceData.nodeVoltages).map(([node, val]) => `
+      <p>⚡ <strong>${node}:</strong> ${val}</p>
+    `).join('');
+
+    document.getElementById('thermal-hotspot-details').innerHTML = `
+      <p><strong>Max System Temp:</strong> ${spiceData.thermalAnalysis.maxSystemTemp_C}°C (Ambient: ${spiceData.thermalAnalysis.ambientTemp_C}°C)</p>
+      <p><strong>Cooling Advice:</strong> ${spiceData.thermalAnalysis.coolingRecommendation}</p>
+      ${spiceData.thermalAnalysis.thermalHotspots.map(h => `<p>🔥 <strong>${h.component}:</strong> ${h.estimatedJunctionTemp_C}°C (${h.powerDissipated_mW}mW dissipated)</p>`).join('')}
+    `;
+  }
+
   function renderFirmware(fw) {
     document.getElementById('firmware-code-block').textContent = fw.files['main/main.c'];
   }
@@ -253,5 +376,20 @@ document.addEventListener('DOMContentLoaded', () => {
       <p><strong>Recommended Materials:</strong> ${enc.materials.join(', ')}</p>
     `;
     document.getElementById('enclosure-scad-code').textContent = enc.cadFiles['enclosure_bottom.scad'];
+  }
+
+  function renderProductRender(renderData) {
+    const renderBox = document.getElementById('render-preview-box');
+    renderBox.innerHTML = renderData.svgRenderAsset;
+  }
+
+  function renderTestFixture(tfData) {
+    document.getElementById('testfixture-points').innerHTML = `
+      <p><strong>Total Pogo-Pin Test Points:</strong> ${tfData.testPointCount}</p>
+      <p><strong>Pogo Pin Model:</strong> ${tfData.fixtureSpecs.pogoPinType}</p>
+      <p><strong>Guide Plate Spec:</strong> ${tfData.fixtureSpecs.plateDimensions_mm.width}mm x ${tfData.fixtureSpecs.plateDimensions_mm.height}mm x ${tfData.fixtureSpecs.plateDimensions_mm.thickness}mm</p>
+      ${tfData.testPoints.map(tp => `<p>📍 <strong>${tp.id}:</strong> ${tp.name} (${tp.x}mm, ${tp.y}mm)</p>`).join('')}
+    `;
+    document.getElementById('testfixture-scad-code').textContent = tfData.cadFiles['pogo_test_jig.scad'];
   }
 });
