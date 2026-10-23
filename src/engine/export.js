@@ -19,6 +19,11 @@ async function bundleReleasePackage(projectData = {}) {
     const pcb = projectData.pcb || {};
     const firmware = projectData.firmware || {};
     const enclosure = projectData.enclosure || {};
+    const render = projectData.render || {};
+    const testfixture = projectData.testfixture || {};
+    const spice = projectData.spice || {};
+    const distributor = projectData.distributor || {};
+    const multiboard = projectData.multiboard || {};
 
     // 1. Add Architecture Spec JSON
     archive.append(JSON.stringify(architecture, null, 2), { name: '01_Architecture/architecture_spec.json' });
@@ -62,7 +67,38 @@ async function bundleReleasePackage(projectData = {}) {
       });
     }
 
-    // 6. Add Compliance Checklist
+    // 6. Add Photorealistic 3D Renders & Disassembly Scene
+    if (render.svgRenderAsset) {
+      archive.append(render.svgRenderAsset, { name: '06_3D_Renders/product_exploded_view.svg' });
+    }
+    if (render.threeScene) {
+      archive.append(JSON.stringify(render.threeScene, null, 2), { name: '06_3D_Renders/three_js_scene.json' });
+    }
+
+    // 7. Add Bed-of-Nails Factory Test Fixture
+    if (testfixture.cadFiles) {
+      Object.entries(testfixture.cadFiles).forEach(([filename, content]) => {
+        archive.append(content, { name: `07_Test_Fixture/${filename}` });
+      });
+    }
+
+    // 8. Add SPICE & Thermal Reports
+    if (spice.spiceNetlist) {
+      archive.append(spice.spiceNetlist, { name: '08_Simulations/circuit_simulation.cir' });
+    }
+    if (spice.thermalAnalysis) {
+      archive.append(JSON.stringify(spice.thermalAnalysis, null, 2), { name: '08_Simulations/thermal_hotspots.json' });
+    }
+
+    // 9. Add Multi-Board System Topology & Distributor Quotes
+    if (multiboard.subBoards) {
+      archive.append(JSON.stringify(multiboard, null, 2), { name: '09_MultiBoard/multiboard_system_topology.json' });
+    }
+    if (distributor.turnkeyQuotes) {
+      archive.append(JSON.stringify(distributor, null, 2), { name: '10_Manufacturing_Quotes/turnkey_fab_quotes.json' });
+    }
+
+    // 10. Add Compliance Checklist
     const complianceDoc = `# CircuitFlow Pre-Compliance & Launch Checklist
 
 1. FCC / CE EMC Pre-Compliance Guidelines
@@ -70,14 +106,14 @@ async function bundleReleasePackage(projectData = {}) {
    - [x] Decoupling Capacitors placed close to MCU power pins
    - [x] Differential pairs impedance matched (90 ohm USB, 50 ohm RF)
 
-2. Production Assembly Steps
+2. Production Assembly & Factory QA Steps
    - Step 1: Solder Paste Stencil Application (0.12mm stainless steel)
    - Step 2: Automated SMT Pick & Place
    - Step 3: Reflow Oven Profile (Lead-Free SAC305)
    - Step 4: Visual Inspection & Automated Optical Inspection (AOI)
-   - Step 5: Pogo-Pin Functional Test Bench Execution & Firmware Flashing
+   - Step 5: Factory Bed-of-Nails Pogo-Pin Test Bench Execution & Firmware Flashing
 `;
-    archive.append(complianceDoc, { name: '06_Compliance_Launch/Pre_Compliance_Checklist.md' });
+    archive.append(complianceDoc, { name: '11_Compliance_Launch/Pre_Compliance_Checklist.md' });
 
     archive.finalize();
   });

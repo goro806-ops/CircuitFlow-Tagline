@@ -27,20 +27,32 @@
         <button class="nav-item" data-tab="architecture">
           <span class="icon">🧩</span> 2. Architecture
         </button>
+        <button class="nav-item" data-tab="multiboard">
+          <span class="icon">🔌</span> 3. Multi-Board Systems
+        </button>
         <button class="nav-item" data-tab="bom">
-          <span class="icon">📊</span> 3. BOM & Supply Chain
+          <span class="icon">📊</span> 4. BOM & Cart Sync
         </button>
         <button class="nav-item" data-tab="pcb">
-          <span class="icon">🖥️</span> 4. PCB & Physical Design
+          <span class="icon">🖥️</span> 5. PCB & Physical Layout
+        </button>
+        <button class="nav-item" data-tab="spice">
+          <span class="icon">🔥</span> 6. SPICE & Thermals
         </button>
         <button class="nav-item" data-tab="firmware">
-          <span class="icon">⚡</span> 5. Firmware & HAL
+          <span class="icon">⚡</span> 7. Firmware & HAL
         </button>
         <button class="nav-item" data-tab="enclosure">
-          <span class="icon">📦</span> 6. 3D Enclosure
+          <span class="icon">📦</span> 8. 3D Enclosure
+        </button>
+        <button class="nav-item" data-tab="render">
+          <span class="icon">🎨</span> 9. 3D Studio & 360 View
+        </button>
+        <button class="nav-item" data-tab="testfixture">
+          <span class="icon">📍</span> 10. Factory Test Jig
         </button>
         <button class="nav-item" data-tab="export">
-          <span class="icon">🚀</span> 7. Launch & Export
+          <span class="icon">🚀</span> 11. Launch & Export
         </button>
       </nav>
 
@@ -120,14 +132,29 @@
           </div>
         </section>
 
-        <!-- View 3: BOM -->
+        <!-- View 3: Multi-Board Systems -->
+        <section id="view-multiboard" class="tab-view">
+          <div class="grid-2col">
+            <div class="card">
+              <h3>Multi-Board Subsystem Split</h3>
+              <div id="multiboard-details" class="details-list">No data generated yet.</div>
+            </div>
+            <div class="card">
+              <h3>Flex Ribbon Cable Interconnects</h3>
+              <div id="multiboard-connections" class="details-list">No data generated yet.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- View 4: BOM -->
         <section id="view-bom" class="tab-view">
           <div class="card">
             <div class="card-header-flex">
-              <h3>Live Bill of Materials (BOM)</h3>
+              <h3>Live Bill of Materials (BOM) & Distributor Cart Sync</h3>
               <div id="bom-summary-badge" class="badge">BOM Unit Cost: $0.00</div>
             </div>
-            <div class="table-wrapper">
+            <div id="distributor-quotes-bar" class="quotes-flex"></div>
+            <div class="table-wrapper margin-top">
               <table id="bom-table">
                 <thead>
                   <tr>
@@ -150,7 +177,7 @@
           </div>
         </section>
 
-        <!-- View 4: PCB -->
+        <!-- View 5: PCB -->
         <section id="view-pcb" class="tab-view">
           <div class="grid-2col">
             <div class="card">
@@ -166,7 +193,21 @@
           </div>
         </section>
 
-        <!-- View 5: Firmware -->
+        <!-- View 6: SPICE & Thermals -->
+        <section id="view-spice" class="tab-view">
+          <div class="grid-2col">
+            <div class="card">
+              <h3>SPICE Circuit Simulation Nodal Voltages</h3>
+              <div id="spice-node-details" class="details-list">No simulation run yet.</div>
+            </div>
+            <div class="card">
+              <h3>Thermal Dissipation & Junction Temperatures</h3>
+              <div id="thermal-hotspot-details" class="details-list">No thermal data yet.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- View 7: Firmware -->
         <section id="view-firmware" class="tab-view">
           <div class="card">
             <h3>Generated HAL & RTOS Firmware Source</h3>
@@ -174,7 +215,7 @@
           </div>
         </section>
 
-        <!-- View 6: Enclosure -->
+        <!-- View 8: Enclosure -->
         <section id="view-enclosure" class="tab-view">
           <div class="grid-2col">
             <div class="card">
@@ -188,13 +229,41 @@
           </div>
         </section>
 
-        <!-- View 7: Export -->
+        <!-- View 9: 3D Render & 360 View -->
+        <section id="view-render" class="tab-view">
+          <div class="card">
+            <div class="card-header-flex">
+              <h3>Photorealistic 3D Product Assembly Render</h3>
+              <div class="render-controls-bar">
+                <label><input type="checkbox" id="chk-explode-disassembly"> <strong>Exploded Disassembly View</strong></label>
+                <label>360° Orbit Angle: <input type="range" id="slider-360-rotation" min="0" max="360" value="0"> <span id="lbl-360-deg">0°</span></label>
+              </div>
+            </div>
+            <div id="render-preview-box" class="render-box">No 3D render generated yet.</div>
+          </div>
+        </section>
+
+        <!-- View 10: Factory Test Fixture -->
+        <section id="view-testfixture" class="tab-view">
+          <div class="grid-2col">
+            <div class="card">
+              <h3>Bed-of-Nails Pogo-Pin Test Point Map</h3>
+              <div id="testfixture-points" class="details-list">No test points generated yet.</div>
+            </div>
+            <div class="card">
+              <h3>Pogo-Pin Guide Plate OpenSCAD CAD Script</h3>
+              <pre><code id="testfixture-scad-code" class="code-block">// Test jig SCAD code will be generated here...</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- View 11: Export -->
         <section id="view-export" class="tab-view">
           <div class="card text-center">
             <div class="export-hero">
               <div class="hero-icon">📦</div>
               <h2>Production Release Package Ready</h2>
-              <p>Download turn-key Gerbers, Pick-and-Place, BOM CSVs, Firmware C/C++, CAD STEP/STL, and Compliance Checklists in one single ZIP archive.</p>
+              <p>Download turn-key Gerbers, Pick-and-Place, BOM CSVs, Firmware C/C++, CAD STEP/STL, 360 Studio Renders, SPICE Reports, Distributor Quotes, and Factory Test Fixtures in one single ZIP archive.</p>
               <button id="btn-download-zip" class="btn btn-accent btn-large margin-top">
                 <span>📥 Download Complete Production Package (.ZIP)</span>
               </button>
