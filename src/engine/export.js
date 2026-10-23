@@ -24,11 +24,21 @@ async function bundleReleasePackage(projectData = {}) {
     const spice = projectData.spice || {};
     const distributor = projectData.distributor || {};
     const multiboard = projectData.multiboard || {};
+    const consumer = projectData.consumer || {};
+    const negotiator = projectData.negotiator || {};
 
     // 1. Add Architecture Spec JSON
     archive.append(JSON.stringify(architecture, null, 2), { name: '01_Architecture/architecture_spec.json' });
 
-    // 2. Add BOM CSV
+    // 2. Add Consumer Profile & Shape Negotiation Audit
+    if (consumer.profileName) {
+      archive.append(JSON.stringify(consumer, null, 2), { name: '01_Architecture/consumer_target_profile.json' });
+    }
+    if (negotiator.conflicts) {
+      archive.append(JSON.stringify(negotiator, null, 2), { name: '01_Architecture/ai_shape_negotiation_audit.json' });
+    }
+
+    // 3. Add BOM CSV
     let bomCsv = 'Item,Designator,MPN,Manufacturer,Description,Package,Quantity,UnitPriceUSD,Lifecycle\n';
     if (bom.items) {
       bom.items.forEach(item => {
@@ -37,7 +47,7 @@ async function bundleReleasePackage(projectData = {}) {
     }
     archive.append(bomCsv, { name: '02_BOM/bill_of_materials.csv' });
 
-    // 3. Add Gerber & PCB Manufacturing Files
+    // 4. Add Gerber & PCB Manufacturing Files
     if (pcb.gerberFiles) {
       Object.entries(pcb.gerberFiles).forEach(([filename, content]) => {
         archive.append(content, { name: `03_PCB_Gerbers/${filename}` });
@@ -53,21 +63,21 @@ async function bundleReleasePackage(projectData = {}) {
     }
     archive.append(pnpCsv, { name: '03_PCB_Gerbers/Pick_and_Place_Centroid.csv' });
 
-    // 4. Add Firmware Files
+    // 5. Add Firmware Files
     if (firmware.files) {
       Object.entries(firmware.files).forEach(([filepath, content]) => {
         archive.append(content, { name: `04_Firmware/${filepath}` });
       });
     }
 
-    // 5. Add Enclosure CAD
+    // 6. Add Enclosure CAD
     if (enclosure.cadFiles) {
       Object.entries(enclosure.cadFiles).forEach(([filename, content]) => {
         archive.append(content, { name: `05_Enclosure_CAD/${filename}` });
       });
     }
 
-    // 6. Add Photorealistic 3D Renders & Disassembly Scene
+    // 7. Add Photorealistic 3D Renders & Disassembly Scene
     if (render.svgRenderAsset) {
       archive.append(render.svgRenderAsset, { name: '06_3D_Renders/product_exploded_view.svg' });
     }
@@ -75,14 +85,14 @@ async function bundleReleasePackage(projectData = {}) {
       archive.append(JSON.stringify(render.threeScene, null, 2), { name: '06_3D_Renders/three_js_scene.json' });
     }
 
-    // 7. Add Bed-of-Nails Factory Test Fixture
+    // 8. Add Bed-of-Nails Factory Test Fixture
     if (testfixture.cadFiles) {
       Object.entries(testfixture.cadFiles).forEach(([filename, content]) => {
         archive.append(content, { name: `07_Test_Fixture/${filename}` });
       });
     }
 
-    // 8. Add SPICE & Thermal Reports
+    // 9. Add SPICE & Thermal Reports
     if (spice.spiceNetlist) {
       archive.append(spice.spiceNetlist, { name: '08_Simulations/circuit_simulation.cir' });
     }
@@ -90,7 +100,7 @@ async function bundleReleasePackage(projectData = {}) {
       archive.append(JSON.stringify(spice.thermalAnalysis, null, 2), { name: '08_Simulations/thermal_hotspots.json' });
     }
 
-    // 9. Add Multi-Board System Topology & Distributor Quotes
+    // 10. Add Multi-Board System Topology & Distributor Quotes
     if (multiboard.subBoards) {
       archive.append(JSON.stringify(multiboard, null, 2), { name: '09_MultiBoard/multiboard_system_topology.json' });
     }
@@ -98,13 +108,13 @@ async function bundleReleasePackage(projectData = {}) {
       archive.append(JSON.stringify(distributor, null, 2), { name: '10_Manufacturing_Quotes/turnkey_fab_quotes.json' });
     }
 
-    // 10. Add Compliance Checklist
+    // 11. Add Compliance Checklist
     const complianceDoc = `# CircuitFlow Pre-Compliance & Launch Checklist
 
-1. FCC / CE EMC Pre-Compliance Guidelines
-   - [x] Ground Plane Continuity Verified (4-layer stackup)
-   - [x] Decoupling Capacitors placed close to MCU power pins
-   - [x] Differential pairs impedance matched (90 ohm USB, 50 ohm RF)
+1. Consumer Profile & Environmental Compliance
+   - Profile: ${consumer.profileName || 'Standard'}
+   - Ingress Protection: ${consumer.ipRating || 'IP54'}
+   - Drop Specification: ${consumer.dropTestRating || '1.5M'}
 
 2. Production Assembly & Factory QA Steps
    - Step 1: Solder Paste Stencil Application (0.12mm stainless steel)

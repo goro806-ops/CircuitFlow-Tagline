@@ -13,7 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
     testfixture: null,
     spice: null,
     distributor: null,
-    multiboard: null
+    multiboard: null,
+    consumer: null,
+    negotiator: null
   };
 
   // Tab Navigation Elements
@@ -23,14 +25,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const currentTabSubtitle = document.getElementById('current-tab-subtitle');
 
   const tabTitlesMap = {
-    prompt: { title: '1. Device Concept & Vision', subtitle: 'Specify your electronic device requirements or use a quick preset.' },
+    prompt: { title: '1. Device Concept & Consumer Target Profile', subtitle: 'Specify your electronic device requirements and select target consumer characteristics.' },
     architecture: { title: '2. Architecture & Topology', subtitle: 'View auto-selected MCU, peripherals, and power subsystem.' },
     multiboard: { title: '3. Multi-Board Systems', subtitle: 'Multi-board motherboard/daughterboard split & FPC ribbon links.' },
     bom: { title: '4. Bill of Materials & Cart Sync', subtitle: 'Real-time component stock, lifecycle, and instant distributor cart sync.' },
     pcb: { title: '5. PCB Placement & Layer Stackup', subtitle: '2D placement visualizer, layer stackup, and DRC pass check.' },
     spice: { title: '6. SPICE Simulation & Thermal Analysis', subtitle: 'Nodal voltage checks and power thermal dissipation hotspots.' },
     firmware: { title: '7. Auto-Generated Firmware & Drivers', subtitle: 'C/C++ Board Support Packages (BSP) and HAL drivers.' },
-    enclosure: { title: '8. 3D Parametric CAD Enclosure', subtitle: 'Custom 3D printable enclosure dimensions and OpenSCAD script.' },
+    enclosure: { title: '8. 3D Parametric CAD Enclosure & Shape Customization', subtitle: 'Custom shape tuning & AI Multi-Physics Design Conflict Negotiator.' },
     render: { title: '9. 3D Studio Render & 360 Disassembly View', subtitle: '360° orbital rotation & exploded disassembly view.' },
     testfixture: { title: '10. Factory Bed-of-Nails Test Jig', subtitle: 'Automated pogo-pin test point map & factory QA fixture CAD.' },
     export: { title: '11. Production Package Launch', subtitle: 'Download turn-key production release package zip archive.' }
@@ -97,6 +99,51 @@ document.addEventListener('DOMContentLoaded', () => {
   chkExplode.addEventListener('change', update3DRender);
   slider360.addEventListener('input', update3DRender);
 
+  // Shape Customization & Negotiator Action
+  const btnRunNegotiator = document.getElementById('btn-run-shape-negotiator');
+  btnRunNegotiator.addEventListener('click', async () => {
+    const height_mm = parseFloat(document.getElementById('input-shape-height').value);
+    const wallThickness_mm = parseFloat(document.getElementById('input-shape-wall').value);
+    const hasVentHoles = document.getElementById('select-shape-vents').value === 'true';
+
+    try {
+      // 1. Audit Negotiation
+      const negRes = await fetch('/api/generate/negotiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentDesign: projectData, requestedShapeChange: { height_mm, wallThickness_mm, hasVentHoles } })
+      });
+      const negData = await negRes.json();
+      projectData.negotiator = negData.negotiation;
+      renderNegotiationResults(negData.negotiation);
+
+      // 2. Re-generate Enclosure CAD with options
+      const encRes = await fetch('/api/generate/enclosure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pcb: projectData.pcb, consumer: projectData.consumer, options: { height_mm, wallThickness_mm } })
+      });
+      const encData = await encRes.json();
+      projectData.enclosure = encData.enclosure;
+      renderEnclosure(encData.enclosure);
+
+      // 3. Update SPICE thermal dissipation
+      const spiceRes = await fetch('/api/generate/spice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ architecture: projectData.architecture, bom: projectData.bom, consumer: projectData.consumer, shape: { height_mm } })
+      });
+      const spiceData = await spiceRes.json();
+      projectData.spice = spiceData.spice;
+      renderSpiceAndThermal(spiceData.spice);
+
+      update3DRender();
+
+    } catch (err) {
+      alert('Shape negotiation error: ' + err.message);
+    }
+  });
+
   // Generate Action
   const btnGenerateAll = document.getElementById('btn-generate-all');
   const btnExportPkg = document.getElementById('btn-export-pkg');
@@ -105,12 +152,23 @@ document.addEventListener('DOMContentLoaded', () => {
   btnGenerateAll.addEventListener('click', async () => {
     const prompt = promptInput.value || 'Compact BLE IoT device with IMU motion sensor';
     const maxCost = document.getElementById('cost-constraint').value;
+    const profileType = document.getElementById('consumer-profile-select').value;
 
     btnGenerateAll.disabled = true;
-    btnGenerateAll.textContent = '⚡ Synthesizing Electronics Architecture...';
+    btnGenerateAll.textContent = '⚡ Synthesizing Consumer Profile & Architecture...';
 
     try {
-      // 1. Architecture
+      // 1. Consumer Profile
+      const consumerRes = await fetch('/api/generate/consumer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileType })
+      });
+      const consumerData = await consumerRes.json();
+      projectData.consumer = consumerData.consumer;
+      renderConsumerProfile(consumerData.consumer);
+
+      // 2. Architecture
       const archRes = await fetch('/api/generate/architecture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -120,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.architecture = archData.architecture;
       renderArchitecture(archData.architecture);
 
-      // 2. Multi-Board Subsystems
+      // 3. Multi-Board Subsystems
       btnGenerateAll.textContent = '⚡ Analyzing Multi-Board Subsystem Split...';
       const mbRes = await fetch('/api/generate/multiboard', {
         method: 'POST',
@@ -131,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.multiboard = mbData.multiboard;
       renderMultiBoard(mbData.multiboard);
 
-      // 3. BOM & Distributor Quotes
+      // 4. BOM & Distributor Quotes
       btnGenerateAll.textContent = '⚡ Querying Live Supply Chain & Distributor Carts...';
       const bomRes = await fetch('/api/generate/bom', {
         method: 'POST',
@@ -151,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.distributor = distData.distributor;
       renderDistributorQuotes(distData.distributor);
 
-      // 4. PCB
+      // 5. PCB
       btnGenerateAll.textContent = '⚡ Auto-Routing PCB & Generating Gerbers...';
       const pcbRes = await fetch('/api/generate/pcb', {
         method: 'POST',
@@ -162,18 +220,18 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.pcb = pcbData.pcb;
       renderPCB(pcbData.pcb);
 
-      // 5. SPICE Simulation & Thermals
+      // 6. SPICE Simulation & Thermals
       btnGenerateAll.textContent = '⚡ Running SPICE Simulation & Thermal Dissipation Analysis...';
       const spiceRes = await fetch('/api/generate/spice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ architecture: projectData.architecture, bom: projectData.bom })
+        body: JSON.stringify({ architecture: projectData.architecture, bom: projectData.bom, consumer: projectData.consumer })
       });
       const spiceData = await spiceRes.json();
       projectData.spice = spiceData.spice;
       renderSpiceAndThermal(spiceData.spice);
 
-      // 6. Firmware
+      // 7. Firmware
       btnGenerateAll.textContent = '⚡ Scaffolding C/C++ HAL Firmware...';
       const fwRes = await fetch('/api/generate/firmware', {
         method: 'POST',
@@ -184,18 +242,18 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.firmware = fwData.firmware;
       renderFirmware(fwData.firmware);
 
-      // 7. Enclosure
+      // 8. Enclosure
       btnGenerateAll.textContent = '⚡ Synthesizing 3D Parametric CAD Enclosure...';
       const encRes = await fetch('/api/generate/enclosure', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pcb: projectData.pcb })
+        body: JSON.stringify({ pcb: projectData.pcb, consumer: projectData.consumer })
       });
       const encData = await encRes.json();
       projectData.enclosure = encData.enclosure;
       renderEnclosure(encData.enclosure);
 
-      // 8. Photorealistic Render (Exploded/Disassembly View Ready)
+      // 9. Photorealistic Render (Exploded/Disassembly View Ready)
       btnGenerateAll.textContent = '⚡ Generating 360° Studio Assembly Render...';
       const renderRes = await fetch('/api/generate/render', {
         method: 'POST',
@@ -206,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
       projectData.render = renderData.render;
       renderProductRender(renderData.render);
 
-      // 9. Factory Test Fixture
+      // 10. Factory Test Fixture
       btnGenerateAll.textContent = '⚡ Mapping Bed-of-Nails Test Fixture...';
       const tfRes = await fetch('/api/generate/testfixture', {
         method: 'POST',
@@ -260,6 +318,38 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Render Functions
+  function renderConsumerProfile(consumer) {
+    document.getElementById('consumer-specs-details').innerHTML = `
+      <p><strong>Target Profile:</strong> ${consumer.profileName}</p>
+      <p><strong>Ingress Protection:</strong> ${consumer.ipRating}</p>
+      <p><strong>Drop Test Rating:</strong> ${consumer.dropTestRating}</p>
+      <p><strong>Operating Temperature:</strong> ${consumer.operatingTempRange_C}°C</p>
+      <p><strong>Fastener Security:</strong> ${consumer.fastenerSecurity}</p>
+      <p><strong>Material Specs:</strong> ${consumer.materialRequirements.join(', ')}</p>
+    `;
+  }
+
+  function renderNegotiationResults(neg) {
+    const box = document.getElementById('negotiation-results-box');
+    box.innerHTML = `
+      <p><strong>AI Physical & Thermal Health Score:</strong> <span class="badge" style="background:${neg.overallHealthScore < 70 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}; color:${neg.overallHealthScore < 70 ? '#ef4444' : '#10b981'};">${neg.overallHealthScore} / 100</span></p>
+      ${neg.conflicts.map(c => `
+        <div class="conflict-card margin-top">
+          <h4>🚨 Conflict Detected: ${c.title}</h4>
+          <p>${c.message}</p>
+          <p><strong>Impact:</strong> ${c.impact}</p>
+        </div>
+      `).join('')}
+      ${neg.negotiatedAlternatives.map(s => `
+        <div class="suggestion-card margin-top">
+          <h4>💡 AI Trade-Off Alternative: ${s.title}</h4>
+          <p>${s.description}</p>
+          <p><strong>Thermal Margin:</strong> ${s.tradeOffs.thermalStatus} | <strong>Durability:</strong> ${s.tradeOffs.durabilityStatus} | <strong>Cost Impact:</strong> ${s.tradeOffs.costImpactUSD}</p>
+        </div>
+      `).join('')}
+    `;
+  }
+
   function renderArchitecture(arch) {
     document.getElementById('arch-mcu-details').innerHTML = `
       <p><strong>Selected MCU/SoC:</strong> ${arch.mcu.name}</p>
@@ -267,13 +357,6 @@ document.addEventListener('DOMContentLoaded', () => {
       <p><strong>Package:</strong> ${arch.mcu.package}</p>
       <p><strong>Wireless Interfaces:</strong> ${arch.mcu.wireless.join(', ')}</p>
       <p><strong>Power Source:</strong> ${arch.powerSystem.type}</p>
-    `;
-
-    document.getElementById('arch-power-budget').innerHTML = `
-      <p><strong>MCU Active Consumption:</strong> ${arch.powerBudget.mcuPower_mW} mW</p>
-      <p><strong>Peripherals Total:</strong> ${arch.powerBudget.peripheralsPower_mW} mW</p>
-      <p><strong>Total System Power:</strong> ${arch.powerBudget.totalPower_mW} mW</p>
-      <p><strong>Battery Run Time Est.:</strong> ${arch.powerSystem.estimatedOperatingHours} hrs</p>
     `;
 
     const canvas = document.getElementById('block-diagram-canvas');
@@ -372,7 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('enclosure-specs').innerHTML = `
       <p><strong>Outer Dimensions:</strong> ${enc.dimensions_mm.outerWidth}mm x ${enc.dimensions_mm.outerHeight}mm x ${enc.dimensions_mm.outerDepth}mm</p>
       <p><strong>Wall Thickness:</strong> ${enc.dimensions_mm.wallThickness}mm</p>
-      <p><strong>Mounting Screw Spec:</strong> M2.5 Self-Tapping</p>
+      <p><strong>IP Rating:</strong> ${enc.consumerFeatures.ipRating}</p>
       <p><strong>Recommended Materials:</strong> ${enc.materials.join(', ')}</p>
     `;
     document.getElementById('enclosure-scad-code').textContent = enc.cadFiles['enclosure_bottom.scad'];
