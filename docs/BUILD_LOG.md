@@ -3,63 +3,78 @@
 ## 2026-10-24 – Multi-agent foundation started
 
 - Shared Project State (`state.js`)
-- SpecAgent
-- ArchitectureAgent
-- Simple Orchestrator + CLI runner
+- SpecAgent, ArchitectureAgent
+- Simple linear Orchestrator + CLI
 
 ---
 
-## 2026-10-24 – ComponentAgent added
+## 2026-10-24 – ComponentAgent + SchematicAgent
 
-- First-pass BOM generation from architecture
-- Cost estimation + target cost checking
-- Pipeline: Spec → Architecture → Component
+- First-pass BOM generation
+- First-pass schematic / netlist generation
+- Confidence/risk aggregation
+- Human escalation path
 
----
-
-## 2026-10-24 – Confidence / Risk + Human Escalation
-
-- `risk.js` – aggregates confidence & risk from all agents
-- `humanEscalationAgent.js` – creates structured briefing for senior engineer
-- Orchestrator decides whether to escalate
-
----
-
-## 2026-10-24 – SchematicAgent added
-
-### What was added
-
-- `src/agents/schematicAgent.js`  
-  Generates a simplified first-pass schematic representation (component list + nets).  
-  Creates basic power nets, I2C bus for sensors, and a few standard passives.  
-  Reports issues (e.g. too many sensors on one bus, power concerns for wearables).
-
-- Orchestrator updated to **v0.4**
-
-### Current full pipeline
-
+Pipeline became:
 ```
-SpecAgent
-    ↓
-ArchitectureAgent
-    ↓
-ComponentAgent
-    ↓
-SchematicAgent
-    ↓
-Risk Aggregation
-    ↓
-Human Escalation (if needed)
+Spec → Architecture → Component → Schematic → Risk → (Escalate | Finish)
 ```
 
-### How to test
+---
+
+## 2026-10-24 – LangGraph Migration (v1)
+
+### What changed
+
+- New file: `src/agents/langgraphOrchestrator.js`
+  - Real **LangGraph StateGraph**
+  - Each agent is a proper graph node
+  - Conditional edge after risk aggregation:
+    - `needs_human === true` → HumanEscalationAgent
+    - otherwise → finish
+  - Shared graph state holds the full Project + agentResults + aggregation + logs
+
+- `src/agents/run.js` updated
+  - Uses LangGraph orchestrator by default
+  - Falls back to classic orchestrator if LangGraph packages are missing
+  - `USE_CLASSIC=1` forces the old linear orchestrator
+
+- `package.json` updated with:
+  - `@langchain/langgraph`
+  - `@langchain/core`
+
+### How to run
 
 ```bash
-node src/agents/run.js "Bluetooth Low Energy wearable tracker with 6-axis IMU, battery powered, under $15 BOM"
+# Install the new dependencies first
+npm install
+
+# Run with LangGraph (default)
+npm run agents:example
+
+# Or with a custom prompt
+node src/agents/run.js "Your idea here"
+
+# Force classic orchestrator
+npm run agents:classic
+```
+
+### Graph structure (v1)
+
+```
+START
+  → spec
+  → architecture
+  → component
+  → schematic
+  → risk
+       ├─ (needs human) → escalate → finish → END
+       └─ (ok)          → finish → END
 ```
 
 ### Next planned steps
-1. Move the orchestrator to LangGraph (real control flow, branching, revision loops)
-2. Start replacing rule-based logic with LLM + tool calling
-3. Add PCBLayoutAgent (even if very basic)
-4. Connect live distributor pricing
+1. Add checkpointing / persistence (so long-running designs can pause & resume)
+2. Introduce real LLM calls inside SpecAgent and ComponentAgent
+3. Add PCBLayoutAgent
+4. Add revision loops (Reviewer agents that can send work back)
+5. Expose the graph via an API endpoint
