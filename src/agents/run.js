@@ -1,11 +1,5 @@
 /**
  * CLI entry point for the CircuitFlow multi-agent pipeline.
- *
- * Usage:
- *   node src/agents/run.js "Your hardware idea here"
- *   node src/agents/run.js --load proj_xxxxx
- *
- * USE_CLASSIC=1 forces the old linear orchestrator.
  */
 
 async function main() {
@@ -28,6 +22,8 @@ async function main() {
           layers: project.pcb.layers,
           placements: project.pcb.placements?.length
         } : null,
+        firmware_modules: project.firmware?.modules?.length,
+        enclosure: project.enclosure?.outer_mm,
         needs_human: !!project.escalation,
         history_length: project.history?.length
       }, null, 2));
@@ -53,8 +49,7 @@ async function main() {
       try {
         ({ runPipeline } = require("./langgraphOrchestrator"));
       } catch (err) {
-        console.warn("LangGraph orchestrator not available. Falling back to classic.");
-        console.warn("Run: npm install @langchain/langgraph @langchain/core\n");
+        console.warn("LangGraph not available. Falling back to classic.");
         ({ runPipeline } = require("./orchestrator"));
       }
     }
@@ -69,21 +64,20 @@ async function main() {
       architecture_mcu: project.architecture?.mcu_family,
       bom_estimate: project.bom?.estimated_total,
       schematic_components: project.schematic?.components?.length,
-      schematic_nets: project.schematic?.nets?.length,
       pcb: project.pcb ? {
         size_mm: `${project.pcb.outline.width_mm}×${project.pcb.outline.height_mm}`,
         layers: project.pcb.layers,
-        placements: project.pcb.placements?.length,
-        issues: project.pcb.issues?.length
+        placements: project.pcb.placements?.length
       } : null,
+      firmware_modules: project.firmware?.modules?.length,
+      enclosure: project.enclosure?.outer_mm,
+      reviews: project.reviews?.length,
       needs_human: !!project.escalation,
       history_length: project.history.length,
       thread_id: project._thread_id || null
     }, null, 2));
 
-    if (project.project_id) {
-      console.log(`\nProject saved under: data/projects/${project.project_id}.json`);
-    }
+    console.log(`\nProject saved under: data/projects/${project.project_id}.json`);
 
   } catch (err) {
     console.error("\nPipeline failed:", err);

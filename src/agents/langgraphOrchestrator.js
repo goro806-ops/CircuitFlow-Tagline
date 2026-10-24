@@ -1,11 +1,8 @@
 /**
- * LangGraph Orchestrator (v1.3)
- * With Reviewer agents + simple revision loops + optional LLM SpecAgent.
- *
- * Pipeline:
- *   Spec → Architecture → Component → Schematic → PCB
- *        → Reviewers → (revise Schematic/PCB if needed, max 2 times)
- *        → Risk → (Escalate | Finish)
+ * LangGraph Orchestrator (v1.4)
+ * Spec → Architecture → Component → Schematic → PCB
+ *   → Firmware + Enclosure (after PCB)
+ *   → Reviewers → revision loops → Risk → Escalate | Finish
  */
 
 const fs = require("fs");
@@ -17,6 +14,8 @@ const { runArchitectureAgent } = require("./architectureAgent");
 const { runComponentAgent } = require("./componentAgent");
 const { runSchematicAgent } = require("./schematicAgent");
 const { runPCBLayoutAgent } = require("./pcbLayoutAgent");
+const { runFirmwareAgent } = require("./firmwareAgent");
+const { runEnclosureAgent } = require("./enclosureAgent");
 const { runReviewers } = require("./reviewers");
 const { aggregateRisk } = require("./risk");
 const { runHumanEscalationAgent } = require("./humanEscalationAgent");
@@ -60,7 +59,6 @@ const GraphState = Annotation.Root({
   })
 });
 
-// ---------- Design nodes ----------
 async function specNode(state) {
   const r = await runSpecAgent(state.project);
   return {
@@ -106,7 +104,24 @@ function pcbNode(state) {
   };
 }
 
-// ---------- Review + revision ----------
+function firmwareNode(state) {
+  const r = runFirmwareAgent(state.project);
+  return {
+    project: r.project,
+    agentResults: { agent: "FirmwareAgent", confidence: r.confidence, risk_level: r.risk_level, summary: r.summary },
+    logs: [`FirmwareAgent → ${r.confidence.toFixed(2)} | ${r.summary}`]
+  };
+}
+
+function enclosureNode(state) {
+  const r = runEnclosureAgent(state.project);
+  return {
+    project: r.project,
+    agentResults: { agent: "EnclosureAgent", confidence: r.confidence, risk_level: r.risk_level, summary: r.summary },
+    logs: [`EnclosureAgent → ${r.confidence.toFixed(2)} | ${r.summary}`]
+  };
+}
+
 function reviewNode(state) {
   const r = runReviewers(state.project);
   return {
@@ -142,7 +157,6 @@ function incrementRevision(state) {
   };
 }
 
-// ---------- Risk & finish ----------
 function riskNode(state) {
   const aggregation = aggregateRisk(state.agentResults || []);
   return {
@@ -174,7 +188,7 @@ function finishNode(state) {
     });
   }
 
-  addHistory(project, "Orchestrator", "pipeline_complete_langgraph_v1.3", {
+  addHistory(project, "Orchestrator", "pipeline_complete_langgraph_v1.4", {
     agents_run: (state.agentResults || []).map(r => r.agent),
     overall_confidence: state.aggregation?.overall_confidence,
     overall_risk: state.aggregation?.overall_risk,
@@ -189,7 +203,6 @@ function finishNode(state) {
   };
 }
 
-// ---------- Build graph ----------
 function buildGraph(checkpointer = null) {
   const graph = new StateGraph(GraphState)
     .addNode("spec", specNode)
@@ -197,6 +210,8 @@ function buildGraph(checkpointer = null) {
     .addNode("component", componentNode)
     .addNode("schematic", schematicNode)
     .addNode("pcb", pcbNode)
+    .addNode("firmware", firmwareNode)
+    .addNode("enclosure", enclosureNode)
     .addNode("review", reviewNode)
     .addNode("inc_revision", incrementRevision)
     .addNode("risk", riskNode)
@@ -208,7 +223,9 @@ function buildGraph(checkpointer = null) {
     .addEdge("architecture", "component")
     .addEdge("component", "schematic")
     .addEdge("schematic", "pcb")
-    .addEdge("pcb", "review")
+    .addEdge("pcb", "firmware")
+    .addEdge("firmware", "enclosure")
+    .addEdge("enclosure", "review")
 
     .addConditionalEdges("review", shouldRevise, {
       revise_schematic: "inc_revision",
@@ -226,12 +243,18 @@ function buildGraph(checkpointer = null) {
       risk: "risk"
     })
 
+    // After schematic revision, continue to pcb → firmware → enclosure → review
+    // (edges from schematic/pcb already defined above; revision re-enters those nodes)
+
     .addConditionalEdges("risk", shouldEscalate, {
       escalate: "escalate",
       finish: "finish"
     })
     .addEdge("escalate", "finish")
     .addEdge("finish", END);
+
+  // Note: when revision goes back to schematic, flow is schematic→pcb→firmware→enclosure→review again
+  // when revision goes to pcb only: pcb→firmware→enclosure→review
 
   if (checkpointer) return graph.compile({ checkpointer });
   return graph.compile();
@@ -240,7 +263,7 @@ function buildGraph(checkpointer = null) {
 async function runPipeline(userPrompt, options = {}) {
   const threadId = options.threadId || `thread_${Date.now().toString(36)}`;
 
-  console.log("\n=== CircuitFlow LangGraph Orchestrator (v1.3) ===");
+  console.log("\n=== CircuitFlow LangGraph Orchestrator (v1.4) ===");
   console.log(`User prompt: "${userPrompt}"`);
   console.log(`Thread ID:   ${threadId}\n`);
 
@@ -265,7 +288,7 @@ async function runPipeline(userPrompt, options = {}) {
   console.log("\n--- Agent Log ---");
   (finalState.logs || []).forEach(line => console.log(line));
 
-  console.log("\n=== Pipeline finished (LangGraph v1.3) ===");
+  console.log("\n=== Pipeline finished (LangGraph v1.4) ===");
   console.log(`Final status: ${finalState.project.status}`);
   console.log(`Revisions:    ${finalState.revisionCount || 0}`);
   console.log(`History:      ${finalState.project.history.length} entries`);

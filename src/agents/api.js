@@ -1,6 +1,5 @@
 /**
- * Multi-agent HTTP API routes
- * Mounted under /api/agents
+ * Multi-agent HTTP API routes – /api/agents
  */
 
 const express = require("express");
@@ -32,11 +31,6 @@ function listSavedProjects() {
     .filter(Boolean);
 }
 
-/**
- * POST /api/agents/run
- * Body: { prompt: string }
- * Runs the full multi-agent pipeline and returns the project state.
- */
 router.post("/run", async (req, res) => {
   try {
     const prompt = (req.body && req.body.prompt) || "";
@@ -69,6 +63,8 @@ router.post("/run", async (req, res) => {
               placements: project.pcb.placements?.length
             }
           : null,
+        firmware_modules: project.firmware?.modules?.length,
+        enclosure: project.enclosure?.outer_mm,
         reviews: project.reviews?.length || 0,
         needs_human: !!project.escalation
       },
@@ -80,23 +76,14 @@ router.post("/run", async (req, res) => {
   }
 });
 
-/**
- * GET /api/agents/projects
- * List saved projects from disk.
- */
 router.get("/projects", (req, res) => {
   try {
-    const projects = listSavedProjects();
-    res.json({ success: true, projects });
+    res.json({ success: true, projects: listSavedProjects() });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-/**
- * GET /api/agents/projects/:id
- * Load a full project by id.
- */
 router.get("/projects/:id", (req, res) => {
   try {
     const { loadProject } = require("./langgraphOrchestrator");
@@ -107,10 +94,6 @@ router.get("/projects/:id", (req, res) => {
   }
 });
 
-/**
- * GET /api/agents/status
- * Health / capability info.
- */
 router.get("/status", (req, res) => {
   const { isLLMEnabled } = require("./llm");
   res.json({
@@ -121,6 +104,8 @@ router.get("/status", (req, res) => {
       "ComponentAgent",
       "SchematicAgent",
       "PCBLayoutAgent",
+      "FirmwareAgent",
+      "EnclosureAgent",
       "SchematicReviewer",
       "LayoutReviewer",
       "PowerThermalReviewer",
@@ -128,7 +113,7 @@ router.get("/status", (req, res) => {
       "HumanEscalationAgent"
     ],
     llm_enabled: isLLMEnabled(),
-    orchestrator: "langgraph-v1.3"
+    orchestrator: "langgraph-v1.4"
   });
 });
 
