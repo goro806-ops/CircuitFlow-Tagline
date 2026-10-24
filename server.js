@@ -21,6 +21,7 @@ const kicadEngine = require('./src/engine/kicad');
 const liveCompEngine = require('./src/engine/live_components');
 const ngspiceEngine = require('./src/engine/ngspice');
 const exportEngine = require('./src/engine/export');
+const businessEngine = require('./src/engine/business');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +29,36 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Business & Monetization Endpoints
+app.get('/api/business/pricing', (req, res) => {
+  try {
+    const tiers = businessEngine.getSubscriptionTiers();
+    res.json({ success: true, tiers });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/business/export-cost', (req, res) => {
+  try {
+    const { tierId, currentMonthExports } = req.body;
+    const costDetails = businessEngine.calculateExportCost(tierId, currentMonthExports || 0);
+    res.json({ success: true, costDetails });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/business/turnkey-quote', (req, res) => {
+  try {
+    const { projectData, tierId } = req.body;
+    const quote = businessEngine.calculateTurnkeyQuote(projectData, tierId);
+    res.json({ success: true, quote });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // API Routes
 app.post('/api/generate/architecture', async (req, res) => {
@@ -85,7 +116,7 @@ app.get('/api/projects/:id', (req, res) => {
   try {
     const project = dbEngine.getProjectById(req.params.id);
     if (!project) {
-      return res.status(444).json({ success: false, error: 'Project not found' });
+      return res.status(404).json({ success: false, error: 'Project not found' });
     }
     res.json({ success: true, project });
   } catch (err) {

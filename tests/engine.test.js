@@ -18,9 +18,10 @@ const negotiatorEngine = require('../src/engine/negotiator');
 const userguideEngine = require('../src/engine/userguide');
 const dbEngine = require('../src/engine/db');
 const exportEngine = require('../src/engine/export');
+const businessEngine = require('../src/engine/business');
 
 async function runTests() {
-  console.log('--- RUNNING CIRCUITFLOW ALL 14 ENGINES TEST SUITE ---');
+  console.log('--- RUNNING CIRCUITFLOW ALL ENGINES TEST SUITE ---');
 
   // Test 1: Architecture Engine
   console.log('Testing Architecture Engine...');
@@ -144,7 +145,20 @@ async function runTests() {
   assert.ok(dbEngine.listProjects().length >= 1);
   console.log('✓ Project Storage Database Engine Passed!');
 
-  // Test 15: Production Package Bundler Engine
+  // Test 15: Business Model & Monetization Engine
+  console.log('Testing Business Model & Turnkey Sourcing Margin Engine...');
+  const tiers = businessEngine.getSubscriptionTiers();
+  assert.ok(tiers.developer && tiers.pro && tiers.enterprise);
+  const devExportCost = businessEngine.calculateExportCost('developer', 0);
+  assert.strictEqual(devExportCost.chargeAmount, 49.00);
+  const proExportCost = businessEngine.calculateExportCost('pro', 0);
+  assert.strictEqual(proExportCost.chargeAmount, 0.00);
+  const quote = businessEngine.calculateTurnkeyQuote({ quantity: 100, bomUnitCost: 10.00 }, 'developer');
+  assert.ok(quote.totalTurnkeyCost > 1000);
+  assert.strictEqual(quote.costBreakdown.marginPercentage, '15%');
+  console.log('✓ Business Model & Monetization Engine Passed!');
+
+  // Test 16: Production Package Bundler Engine
   console.log('Testing Production Release Package Exporter...');
   const zipBuffer = await exportEngine.bundleReleasePackage({
     architecture: arch,
@@ -165,7 +179,7 @@ async function runTests() {
   console.log('✓ Production Release Package Exporter Passed!');
 
   console.log('\n=============================================================');
-  console.log(' ALL 13 CIRCUITFLOW ENGINE MODULE TESTS PASSED CLEANLY! 🎉');
+  console.log(' ALL CIRCUITFLOW ENGINE MODULE TESTS PASSED CLEANLY! 🎉');
   console.log('=============================================================');
 }
 
