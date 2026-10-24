@@ -1,28 +1,43 @@
 # CircuitFlow Build Log
 
-## v1.5 – LLM, durable checkpoints, UI link
+## Foundation complete (v1.5 + finishing pass)
 
-### 1. More LLM usage
-- **ComponentAgent**: optional `llmSuggestBom` merges LLM part suggestions into the rule-based BOM
-- **Reviewers**: optional **LLMReviewer** adds an overall design critique when `OPENAI_API_KEY` is set
-- SpecAgent still uses LLM for constraint extraction
+The multi-agent vertical slice is in place and usable end-to-end.
 
-### 2. Durable checkpoints
-- `src/agents/checkpointer.js`
-- Tries **SqliteSaver** (`@langchain/langgraph-checkpoint-sqlite`) → `data/checkpoints.sqlite`
-- Falls back to **MemorySaver** if the package is missing
-- Override path with `CIRCUITFLOW_CHECKPOINT_DB`
+### Design agents
+Spec (rules + optional LLM) → Architecture → Component (rules + optional LLM) → Schematic → PCB → Firmware → Enclosure
 
-### 3. Homepage → agents UI
-- Legacy `index.html` header links to **Multi-Agent Designer** (`/agents.html`)
+### Reviewers
+Schematic, Layout, PowerThermal, DFM, optional LLMReviewer + revision loops (max 2)
+
+### Infrastructure
+- LangGraph orchestrator with conditional escalation
+- SqliteSaver checkpoints when package installed, else MemorySaver
+- Project JSON under `data/projects/`
+- HTTP API `/api/agents/*`
+- Web UI `/agents.html`
+- Classic orchestrator parity (v0.6) as fallback
+- Smoke test: `npm run test:agents`
 
 ### Run
 ```bash
 npm install
-npm start
-# http://localhost:3000/agents.html
-# http://localhost:3000/  (legacy + link)
-
-export OPENAI_API_KEY=sk-...   # optional LLM
+npm run test:agents
 npm run agents:example
+npm start
+# UI: http://localhost:3000/agents.html
 ```
+
+### Optional LLM
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+### What “finished” means here
+This is a **working foundation**, not a production EDA tool. Agents are still largely heuristic; LLM paths improve Spec/BOM/review when configured. Real autorouting, pin-accurate schematics, and live distributor APIs remain future work.
+
+### Sensible future work (when you resume)
+1. Live distributor pricing (DigiKey / Mouser / Octopart)
+2. Stronger schematic/PCB generation (KiCad export)
+3. Human review UI for `needs_human` projects
+4. Auth + multi-user project store

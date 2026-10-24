@@ -1,5 +1,5 @@
 /**
- * Multi-agent HTTP API routes – /api/agents
+ * Multi-agent HTTP API – /api/agents
  */
 
 const express = require("express");
@@ -95,9 +95,23 @@ router.get("/projects/:id", (req, res) => {
 });
 
 router.get("/status", (req, res) => {
-  const { isLLMEnabled } = require("./llm");
+  let llm = false;
+  let checkpointer = "unknown";
+  try {
+    llm = require("./llm").isLLMEnabled();
+  } catch (_) {}
+  try {
+    checkpointer = require("./checkpointer").createCheckpointer().type;
+  } catch (_) {
+    checkpointer = "memory";
+  }
+
   res.json({
     success: true,
+    version: "1.5",
+    orchestrator: "langgraph-v1.5",
+    llm_enabled: llm,
+    checkpointer,
     agents: [
       "SpecAgent",
       "ArchitectureAgent",
@@ -110,10 +124,16 @@ router.get("/status", (req, res) => {
       "LayoutReviewer",
       "PowerThermalReviewer",
       "DFMReviewer",
+      "LLMReviewer (optional)",
       "HumanEscalationAgent"
     ],
-    llm_enabled: isLLMEnabled(),
-    orchestrator: "langgraph-v1.4"
+    endpoints: {
+      run: "POST /api/agents/run",
+      projects: "GET /api/agents/projects",
+      project: "GET /api/agents/projects/:id",
+      status: "GET /api/agents/status",
+      ui: "/agents.html"
+    }
   });
 });
 
