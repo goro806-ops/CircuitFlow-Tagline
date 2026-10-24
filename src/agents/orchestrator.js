@@ -1,6 +1,6 @@
 /**
  * Classic linear Orchestrator (v0.5)
- * Kept as fallback. Pipeline now includes PCBLayoutAgent.
+ * Kept as fallback. Supports async SpecAgent.
  */
 
 const { createEmptyProject, addHistory } = require("./state");
@@ -20,17 +20,28 @@ async function runPipeline(userPrompt) {
   console.log(`Project ID: ${project.project_id}`);
   console.log(`User prompt: "${userPrompt}"\n`);
 
-  const steps = [
-    { name: "SpecAgent", fn: runSpecAgent },
+  console.log("→ Running SpecAgent...");
+  let result = await runSpecAgent(project);
+  project = result.project;
+  agentResults.push({
+    agent: "SpecAgent",
+    confidence: result.confidence,
+    risk_level: result.risk_level,
+    summary: result.summary
+  });
+  console.log(`   Confidence: ${result.confidence.toFixed(2)} | Risk: ${result.risk_level}`);
+  console.log(`   ${result.summary}`);
+
+  const syncSteps = [
     { name: "ArchitectureAgent", fn: runArchitectureAgent },
     { name: "ComponentAgent", fn: runComponentAgent },
     { name: "SchematicAgent", fn: runSchematicAgent },
     { name: "PCBLayoutAgent", fn: runPCBLayoutAgent }
   ];
 
-  for (const step of steps) {
+  for (const step of syncSteps) {
     console.log(`→ Running ${step.name}...`);
-    const result = step.fn(project);
+    result = step.fn(project);
     project = result.project;
     agentResults.push({
       agent: step.name,
