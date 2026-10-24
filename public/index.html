@@ -7,12 +7,10 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <!-- Three.js for 3D WebGL Interactive PCB & Component Visualizer -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
   <div class="app-container">
-    <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div class="brand">
         <div class="logo-icon">⚡</div>
@@ -21,110 +19,81 @@
           <span class="tagline">From Idea to Hardware</span>
         </div>
       </div>
-
       <nav class="nav-menu">
-        <button class="nav-item active" data-tab="prompt">
-          <span class="icon">💡</span> 1. Concept & Consumer Profile
-        </button>
-        <button class="nav-item" data-tab="architecture">
-          <span class="icon">🧩</span> 2. Architecture
-        </button>
-        <button class="nav-item" data-tab="multiboard">
-          <span class="icon">🔌</span> 3. Multi-Board Systems
-        </button>
-        <button class="nav-item" data-tab="bom">
-          <span class="icon">📊</span> 4. BOM & Cart Sync
-        </button>
-        <button class="nav-item" data-tab="pcb">
-          <span class="icon">🖥️</span> 5. PCB & Physical Layout
-        </button>
-        <button class="nav-item" data-tab="spice">
-          <span class="icon">🔥</span> 6. SPICE & Thermals
-        </button>
-        <button class="nav-item" data-tab="firmware">
-          <span class="icon">⚡</span> 7. Firmware & HAL
-        </button>
-        <button class="nav-item" data-tab="enclosure">
-          <span class="icon">📦</span> 8. 3D Enclosure & Shapes
-        </button>
-        <button class="nav-item" data-tab="render">
-          <span class="icon">🎨</span> 9. 3D Studio & 360 View
-        </button>
-        <button class="nav-item" data-tab="testfixture">
-          <span class="icon">📍</span> 10. Factory Test Jig
-        </button>
-        <button class="nav-item" data-tab="userguide">
-          <span class="icon">🌐</span> 11. Consumer Guide & Localization
-        </button>
-        <button class="nav-item" data-tab="export">
-          <span class="icon">🚀</span> 12. Launch, Pricing & Quotes
-        </button>
+        <a class="nav-item" href="/agents.html" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:8px;background:rgba(91,140,255,0.15);border:1px solid rgba(91,140,255,0.35);border-radius:8px;margin-bottom:8px;">
+          <span class="icon">🤖</span> Multi-Agent Designer (New)
+        </a>
+        <button class="nav-item active" data-tab="prompt"><span class="icon">💡</span> 1. Concept & Consumer Profile</button>
+        <button class="nav-item" data-tab="architecture"><span class="icon">🧩</span> 2. Architecture</button>
+        <button class="nav-item" data-tab="multiboard"><span class="icon">🔌</span> 3. Multi-Board Systems</button>
+        <button class="nav-item" data-tab="bom"><span class="icon">📊</span> 4. BOM & Cart Sync</button>
+        <button class="nav-item" data-tab="pcb"><span class="icon">🖥️</span> 5. PCB & Physical Layout</button>
+        <button class="nav-item" data-tab="spice"><span class="icon">🔥</span> 6. SPICE & Thermals</button>
+        <button class="nav-item" data-tab="firmware"><span class="icon">⚡</span> 7. Firmware & HAL</button>
+        <button class="nav-item" data-tab="enclosure"><span class="icon">📦</span> 8. 3D Enclosure & Shapes</button>
+        <button class="nav-item" data-tab="render"><span class="icon">🎨</span> 9. 3D Studio & 360 View</button>
+        <button class="nav-item" data-tab="testfixture"><span class="icon">📍</span> 10. Factory Test Jig</button>
+        <button class="nav-item" data-tab="userguide"><span class="icon">🌐</span> 11. Consumer Guide & Localization</button>
+        <button class="nav-item" data-tab="export"><span class="icon">🚀</span> 12. Launch, Pricing & Quotes</button>
       </nav>
-
       <div class="sidebar-footer">
-        <div class="status-indicator">
-          <span class="dot"></span> AI Generative EDA Active
-        </div>
+        <div class="status-indicator"><span class="dot"></span> AI Generative EDA Active</div>
+        <a href="/agents.html" style="display:block;margin-top:10px;color:#5b8cff;font-size:0.85rem;">Open Multi-Agent Pipeline →</a>
       </div>
     </aside>
-
-    <!-- Main Content Area -->
     <main class="main-content">
-      <!-- Header -->
       <header class="top-header">
         <div class="header-title">
           <h2 id="current-tab-title">1. Device Concept & Consumer Target Profile</h2>
-          <p id="current-tab-subtitle">Describe your electronic device specs and select target consumer characteristics.</p>
+          <p id="current-tab-subtitle">Describe your electronic device specs and select target consumer characteristics. Prefer the Multi-Agent Designer for the new pipeline.</p>
         </div>
         <div class="header-actions">
-          <button id="btn-export-pkg" class="btn btn-primary" disabled>
-            <span class="icon">📥</span> Export Production Package
-          </button>
+          <a href="/agents.html" class="btn btn-primary" style="text-decoration:none;margin-right:8px;"><span class="icon">🤖</span> Multi-Agent Designer</a>
+          <button id="btn-export-pkg" class="btn btn-primary" disabled><span class="icon">📥</span> Export Production Package</button>
         </div>
       </header>
-
-      <!-- View Containers -->
       <div class="view-container">
-        <!-- View 1: Concept & Prompt -->
         <section id="view-prompt" class="tab-view active">
           <div class="card">
+            <div class="card margin-top" style="background:rgba(91,140,255,0.12);border:1px solid rgba(91,140,255,0.35);padding:14px;border-radius:10px;">
+              <strong>New:</strong> The multi-agent LangGraph pipeline (Spec → PCB → Firmware → Enclosure → Reviewers) lives at
+              <a href="/agents.html" style="color:#5b8cff;">/agents.html</a>.
+              This legacy page still drives the original demo engines.
+            </div>
             <h3>1. Describe Your Electronic Device</h3>
             <textarea id="prompt-input" placeholder="E.g. A battery-powered BLE wearable fitness tracker with a 6-axis IMU, OLED screen, and USB-C recharging..."></textarea>
-
             <div class="prompt-presets">
               <span>Quick Presets:</span>
               <button class="btn-preset" data-preset="ble_tracker">BLE Wearable Tracker</button>
               <button class="btn-preset" data-preset="stm32_industrial">Industrial STM32 Sensor Node</button>
               <button class="btn-preset" data-preset="rp2040_display">RP2040 Smart Display</button>
             </div>
-
             <div class="card margin-top" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color);">
-              <h4>🧠 LLM Generative Hardware Brain Config (Optional API Key)</h4>
+              <h4>LLM Generative Hardware Brain Config (Optional API Key)</h4>
               <div class="form-row">
                 <div class="form-group">
                   <label>AI LLM Provider:</label>
                   <select id="select-ai-provider">
                     <option value="openai" selected>OpenAI (GPT-4o)</option>
-                    <option value="deepseek">DeepSeek (DeepSeek-V3)</option>
-                    <option value="neural-heuristic">CircuitFlow Neural Heuristic (Free/Built-in)</option>
+                    <option value="deepseek">DeepSeek</option>
+                    <option value="neural-heuristic">CircuitFlow Neural Heuristic (Free)</option>
                   </select>
                 </div>
                 <div class="form-group">
-                  <label>API Key (Optional for Neural Heuristic):</label>
-                  <input type="password" id="input-ai-key" placeholder="sk-proj-xxxxxxxxxxxxxxxxxxxx">
+                  <label>API Key:</label>
+                  <input type="password" id="input-ai-key" placeholder="sk-proj-...">
                 </div>
               </div>
             </div>
-
-            <h3 class="margin-top">2. Target Consumer Characteristics & Environmental Specs</h3>
+            <h3 class="margin-top">2. Target Consumer Characteristics</h3>
             <div class="form-row">
               <div class="form-group">
                 <label>Target Consumer Profile:</label>
                 <select id="consumer-profile-select">
-                  <option value="outdoor_sports" selected>Extreme Outdoor / Ruggedized (IP68, 3M Drop Test)</option>
-                  <option value="children">Children / Educational (IP54, Tamper-proof Screws)</option>
-                  <option value="healthcare">Medical / Patient Wearable (IP67, Skin-Safe TPU)</option>
-                  <option value="industrial_tech">Industrial Field Technician (IP65, -40 to +85°C)</option>
+                  <option value="outdoor_sports" selected>Extreme Outdoor / Ruggedized</option>
+                  <option value="children">Children / Educational</option>
+                  <option value="healthcare">Medical / Patient Wearable</option>
+                  <option value="industrial_tech">Industrial Field Technician</option>
                 </select>
               </div>
               <div class="form-group">
@@ -132,275 +101,23 @@
                 <input type="number" id="cost-constraint" value="25" min="5" max="500">
               </div>
             </div>
-
-            <button id="btn-generate-all" class="btn btn-accent btn-large margin-top">
-              <span>⚡ Generate Complete Hardware Package</span>
-            </button>
+            <button id="btn-generate-all" class="btn btn-accent btn-large margin-top"><span>Generate Complete Hardware Package</span></button>
           </div>
         </section>
-
-        <!-- View 2: Architecture -->
-        <section id="view-architecture" class="tab-view">
-          <div class="grid-2col">
-            <div class="card">
-              <h3>System MCU & Power Subsystem</h3>
-              <div id="arch-mcu-details" class="details-list">No data generated yet.</div>
-            </div>
-            <div class="card">
-              <h3>Consumer Environmental & Material Specs</h3>
-              <div id="consumer-specs-details" class="details-list">No consumer profile data yet.</div>
-            </div>
-          </div>
-          <div class="card margin-top">
-            <h3>Interactive Block Diagram Topology</h3>
-            <div id="block-diagram-canvas" class="canvas-box">Run generation to visualize system topology.</div>
-          </div>
-        </section>
-
-        <!-- View 3: Multi-Board Systems -->
-        <section id="view-multiboard" class="tab-view">
-          <div class="grid-2col">
-            <div class="card">
-              <h3>Multi-Board Subsystem Split</h3>
-              <div id="multiboard-details" class="details-list">No data generated yet.</div>
-            </div>
-            <div class="card">
-              <h3>Flex Ribbon Cable Interconnects</h3>
-              <div id="multiboard-connections" class="details-list">No data generated yet.</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- View 4: BOM -->
-        <section id="view-bom" class="tab-view">
-          <div class="card">
-            <div class="card-header-flex">
-              <h3>Live Bill of Materials (BOM) & Distributor Cart Sync</h3>
-              <div id="bom-summary-badge" class="badge">BOM Unit Cost: $0.00</div>
-            </div>
-            <div id="distributor-quotes-bar" class="quotes-flex"></div>
-            <div class="table-wrapper margin-top">
-              <table id="bom-table">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Designator</th>
-                    <th>MPN</th>
-                    <th>Manufacturer</th>
-                    <th>Description</th>
-                    <th>Package</th>
-                    <th>Qty</th>
-                    <th>Price ($)</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr><td colspan="9" class="text-muted">No BOM generated yet.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- View 5: PCB -->
-        <section id="view-pcb" class="tab-view">
-          <div class="grid-2col">
-            <div class="card">
-              <div class="card-header-flex">
-                <h3>Interactive 3D WebGL PCB & Component Visualizer</h3>
-                <span class="badge" style="background: rgba(6, 182, 212, 0.2); color: #06b6d4;">Three.js Accelerated</span>
-              </div>
-              <div id="pcb-3d-webgl-canvas" class="pcb-board-box" style="height: 360px; width: 100%; border-radius: 6px; overflow: hidden; background: #020617; position: relative;">
-                <div class="placeholder-text" style="padding-top: 150px;">Run Hardware Generation to launch 3D WebGL PCB Board.</div>
-              </div>
-            </div>
-            <div class="card">
-              <h3>Board Layer Stackup & DRC Rules</h3>
-              <div id="pcb-stackup-details" class="details-list">No data generated yet.</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- View 6: SPICE & Thermals -->
-        <section id="view-spice" class="tab-view">
-          <div class="grid-2col">
-            <div class="card">
-              <h3>SPICE Circuit Simulation Nodal Voltages</h3>
-              <div id="spice-node-details" class="details-list">No simulation run yet.</div>
-            </div>
-            <div class="card">
-              <h3>Thermal Dissipation & Junction Temperatures</h3>
-              <div id="thermal-hotspot-details" class="details-list">No thermal data yet.</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- View 7: Firmware -->
-        <section id="view-firmware" class="tab-view">
-          <div class="card">
-            <h3>Generated HAL & RTOS Firmware Source</h3>
-            <pre><code id="firmware-code-block" class="code-block">// Firmware source will be scaffolded here...</code></pre>
-          </div>
-        </section>
-
-        <!-- View 8: Enclosure & Shape Customization -->
-        <section id="view-enclosure" class="tab-view">
-          <div class="card">
-            <div class="card-header-flex">
-              <h3>Custom Shape Customization & Physics Audit</h3>
-              <button id="btn-run-shape-negotiator" class="btn btn-primary">⚡ Audit & Negotiate Shape Changes</button>
-            </div>
-            <div class="form-row margin-top">
-              <div class="form-group">
-                <label>Enclosure Target Height (mm):</label>
-                <input type="number" id="input-shape-height" value="8.0" step="0.5" min="4" max="50">
-              </div>
-              <div class="form-group">
-                <label>Wall Thickness (mm):</label>
-                <input type="number" id="input-shape-wall" value="1.0" step="0.1" min="0.5" max="10">
-              </div>
-              <div class="form-group">
-                <label>Air Ventilation Grilles:</label>
-                <select id="select-shape-vents">
-                  <option value="true" selected>Open Side Vent Grilles (Airflow)</option>
-                  <option value="false">Sealed Outer Shell (Waterproof)</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- AI Negotiator Audit Results -->
-            <div id="negotiation-results-box" class="negotiator-box margin-top">
-              <div class="text-muted">Modify shape parameters above and click "Audit & Negotiate Shape Changes" to evaluate thermal & structural health.</div>
-            </div>
-          </div>
-
-          <div class="grid-2col">
-            <div class="card">
-              <h3>3D Parametric CAD Enclosure Specs</h3>
-              <div id="enclosure-specs" class="details-list">No data generated yet.</div>
-            </div>
-            <div class="card">
-              <h3>OpenSCAD Parametric Script</h3>
-              <pre><code id="enclosure-scad-code" class="code-block">// SCAD code will be generated here...</code></pre>
-            </div>
-          </div>
-        </section>
-
-        <!-- View 9: 3D Render & 360 View -->
-        <section id="view-render" class="tab-view">
-          <div class="card">
-            <div class="card-header-flex">
-              <h3>Photorealistic 3D Product Assembly Render</h3>
-              <div class="render-controls-bar">
-                <label><input type="checkbox" id="chk-explode-disassembly"> <strong>Exploded Disassembly View</strong></label>
-                <label>360° Orbit Angle: <input type="range" id="slider-360-rotation" min="0" max="360" value="0"> <span id="lbl-360-deg">0°</span></label>
-              </div>
-            </div>
-            <div id="render-preview-box" class="render-box">No 3D render generated yet.</div>
-          </div>
-        </section>
-
-        <!-- View 10: Factory Test Fixture -->
-        <section id="view-testfixture" class="tab-view">
-          <div class="grid-2col">
-            <div class="card">
-              <h3>Bed-of-Nails Pogo-Pin Test Point Map</h3>
-              <div id="testfixture-points" class="details-list">No test points generated yet.</div>
-            </div>
-            <div class="card">
-              <h3>Pogo-Pin Guide Plate OpenSCAD CAD Script</h3>
-              <pre><code id="testfixture-scad-code" class="code-block">// Test jig SCAD code will be generated here...</code></pre>
-            </div>
-          </div>
-        </section>
-
-        <!-- View 11: Consumer Guide & Localization -->
-        <section id="view-userguide" class="tab-view">
-          <div class="card">
-            <h3>Localized Consumer User Guide & Safety Manual</h3>
-            <p class="subtitle">Generate region-specific, multi-language quick start guides, safety warnings, and compliance packaging inserts.</p>
-
-            <div class="form-row margin-top">
-              <div class="form-group">
-                <label>Target Region:</label>
-                <select id="userguide-region-select">
-                  <option value="US" selected>North America (FCC Part 15, UL 62368-1, California Prop 65)</option>
-                  <option value="EU">European Union (CE RED 2014/53/EU, EN 62368, WEEE, RoHS)</option>
-                  <option value="JP">Japan (MIC Giteki Radio Law, PSE Denan)</option>
-                  <option value="CN">China (CCC Compulsory, SRRC Radio, China RoHS)</option>
-                  <option value="LATAM">Latin America (Anatel / NOM / Subtel)</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Primary Consumer Language:</label>
-                <select id="userguide-lang-select">
-                  <option value="en" selected>English</option>
-                  <option value="es">Español (Spanish)</option>
-                  <option value="fr">Français (French)</option>
-                  <option value="de">Deutsch (German)</option>
-                  <option value="ja">日本語 (Japanese)</option>
-                  <option value="zh">中文 (Mandarin)</option>
-                </select>
-              </div>
-            </div>
-
-            <button id="btn-generate-userguide" class="btn btn-primary margin-top">
-              <span>⚡ Generate Localized Manual & Compliance Insert</span>
-            </button>
-
-            <div id="userguide-output-box" class="details-list margin-top">
-              <div class="text-muted">Click "Generate Localized Manual" to synthesize localized quick start steps, environmental compliance notices, and certification marks.</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- View 12: Export, Pricing & Turnkey Quotes -->
-        <section id="view-export" class="tab-view">
-          <div class="card text-center">
-            <div class="export-hero">
-              <div class="hero-icon">📦</div>
-              <h2>Production Release Package Ready</h2>
-              <p>Download turn-key Gerbers, Pick-and-Place, BOM CSVs, Firmware C/C++, CAD STEP/STL, 360 Studio Renders, SPICE Reports, Consumer Profile Audits, and Factory Test Fixtures in one single ZIP archive.</p>
-              <button id="btn-download-zip" class="btn btn-accent btn-large margin-top">
-                <span>📥 Download Complete Production Package (.ZIP)</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Business Model & Subscription Tiers -->
-          <div class="card margin-top">
-            <h3>💳 Select Subscription Tier & Turnkey Sourcing Margin</h3>
-            <p class="subtitle">CircuitFlow SaaS Subscription Tiers (Section 8 of Specification)</p>
-
-            <div class="form-row margin-top">
-              <div class="form-group">
-                <label>Active SaaS Tier:</label>
-                <select id="select-user-tier">
-                  <option value="developer" selected>Developer Tier ($0/mo - $49/export download - 15% fulfillment margin)</option>
-                  <option value="pro">Pro Engineer Tier ($199/mo - 5 free exports/mo - 10% fulfillment margin)</option>
-                  <option value="enterprise">Enterprise Team Tier ($999/mo - Unlimited exports - 5% fulfillment margin & HITL Review)</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Production Volume Run:</label>
-                <input type="number" id="input-turnkey-qty" value="100" step="50" min="10" max="50000">
-              </div>
-            </div>
-
-            <button id="btn-calc-turnkey" class="btn btn-primary margin-top">
-              <span>📊 Calculate Instant Turnkey Manufacturing Quote</span>
-            </button>
-
-            <div id="turnkey-quote-output" class="details-list margin-top">
-              <div class="text-muted">Click "Calculate Instant Turnkey Manufacturing Quote" to view PCB fab, PCBA assembly, component sourcing, and CircuitFlow fulfillment margin breakdown.</div>
-            </div>
-          </div>
-        </section>
-
+        <section id="view-architecture" class="tab-view"><div class="card"><h3>Architecture</h3><div id="arch-mcu-details" class="details-list">No data yet.</div></div></section>
+        <section id="view-multiboard" class="tab-view"><div class="card"><h3>Multi-Board</h3><div id="multiboard-details" class="details-list">No data yet.</div></div></section>
+        <section id="view-bom" class="tab-view"><div class="card"><h3>BOM</h3><div id="bom-summary-badge" class="badge">BOM Unit Cost: $0.00</div><table id="bom-table"><thead><tr><th>Item</th><th>MPN</th><th>Price</th></tr></thead><tbody><tr><td colspan="3">No BOM yet.</td></tr></tbody></table></div></section>
+        <section id="view-pcb" class="tab-view"><div class="card"><h3>PCB</h3><div id="pcb-3d-webgl-canvas" class="pcb-board-box" style="height:240px;"></div><div id="pcb-stackup-details" class="details-list">No data yet.</div></div></section>
+        <section id="view-spice" class="tab-view"><div class="card"><h3>SPICE</h3><div id="spice-node-details" class="details-list">No data yet.</div></div></section>
+        <section id="view-firmware" class="tab-view"><div class="card"><h3>Firmware</h3><pre><code id="firmware-code-block" class="code-block">// ...</code></pre></div></section>
+        <section id="view-enclosure" class="tab-view"><div class="card"><h3>Enclosure</h3><div id="enclosure-specs" class="details-list">No data yet.</div></div></section>
+        <section id="view-render" class="tab-view"><div class="card"><h3>Render</h3><div id="render-preview-box" class="render-box">No render yet.</div></div></section>
+        <section id="view-testfixture" class="tab-view"><div class="card"><h3>Test Fixture</h3><div id="testfixture-points" class="details-list">No data yet.</div></div></section>
+        <section id="view-userguide" class="tab-view"><div class="card"><h3>User Guide</h3><div id="userguide-output-box" class="details-list">No data yet.</div></div></section>
+        <section id="view-export" class="tab-view"><div class="card text-center"><h2>Export</h2><button id="btn-download-zip" class="btn btn-accent btn-large">Download Package</button></div></section>
       </div>
     </main>
   </div>
-
   <script src="app.js"></script>
 </body>
 </html>
