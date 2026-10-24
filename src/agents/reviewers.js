@@ -1,22 +1,18 @@
 /**
- * AI Expert Reviewer Agents (v0)
+ * AI Expert Reviewer Agents (v1)
  *
- * These agents critique the work of the design agents and can
- * request revisions. They are the first layer of AI HITL.
+ * SchematicReviewer, LayoutReviewer, PowerThermalReviewer, DFMReviewer
+ * + combined runReviewers() used by the orchestrator.
  */
 
 const { addHistory, addReview } = require("./state");
 
-/**
- * SchematicReviewer
- * Looks for basic electrical / structural problems in the schematic.
- */
 function runSchematicReviewer(project) {
   const issues = [];
   let confidence = 0.75;
   let status = "approved";
-
   const sch = project.schematic;
+
   if (!sch) {
     issues.push("No schematic present");
     status = "rejected";
@@ -32,15 +28,15 @@ function runSchematicReviewer(project) {
       status = "needs_changes";
       confidence -= 0.15;
     }
-    if (sch.issues && sch.issues.length > 0) {
+    if (sch.issues?.length) {
       issues.push(...sch.issues.map(i => `From schematic generation: ${i}`));
       if (status === "approved") status = "needs_changes";
       confidence -= 0.08 * sch.issues.length;
     }
-
-    // Simple power check
-    const hasGnd = sch.nets.some(n => n.name === "GND");
-    const hasPower = sch.nets.some(n => n.name.includes("VCC") || n.name.includes("3V3") || n.name.includes("VIN"));
+    const hasGnd = sch.nets?.some(n => n.name === "GND");
+    const hasPower = sch.nets?.some(n =>
+      n.name.includes("VCC") || n.name.includes("3V3") || n.name.includes("VIN")
+    );
     if (!hasGnd || !hasPower) {
       issues.push("Missing clear power or ground net");
       status = "needs_changes";
@@ -49,31 +45,18 @@ function runSchematicReviewer(project) {
   }
 
   confidence = Math.max(0.2, Math.min(confidence, 0.95));
-  const risk_level = status === "rejected" ? "high" : (status === "needs_changes" ? "medium" : "low");
-
+  const risk_level = status === "rejected" ? "high" : status === "needs_changes" ? "medium" : "low";
   addReview(project, "SchematicReviewer", status, confidence, risk_level, issues);
   addHistory(project, "SchematicReviewer", "reviewed_schematic", { status, issue_count: issues.length });
-
-  return {
-    project,
-    status,
-    confidence,
-    risk_level,
-    issues,
-    summary: `Schematic review: ${status} (${issues.length} issues)`
-  };
+  return { project, status, confidence, risk_level, issues, summary: `Schematic review: ${status} (${issues.length} issues)` };
 }
 
-/**
- * LayoutReviewer
- * Critiques the PCB layout for basic manufacturability and density issues.
- */
 function runLayoutReviewer(project) {
   const issues = [];
   let confidence = 0.72;
   let status = "approved";
-
   const pcb = project.pcb;
+
   if (!pcb) {
     issues.push("No PCB layout present");
     status = "rejected";
@@ -89,13 +72,11 @@ function runLayoutReviewer(project) {
       status = "needs_changes";
       confidence -= 0.1;
     }
-    if (pcb.issues && pcb.issues.length > 0) {
+    if (pcb.issues?.length) {
       issues.push(...pcb.issues.map(i => `From layout generation: ${i}`));
       if (status === "approved") status = "needs_changes";
       confidence -= 0.07 * pcb.issues.length;
     }
-
-    // Density heuristic
     const area = pcb.outline.width_mm * pcb.outline.height_mm;
     const count = pcb.placements?.length || 0;
     if (count > 0 && area / count < 40) {
@@ -106,49 +87,117 @@ function runLayoutReviewer(project) {
   }
 
   confidence = Math.max(0.2, Math.min(confidence, 0.95));
-  const risk_level = status === "rejected" ? "high" : (status === "needs_changes" ? "medium" : "low");
-
+  const risk_level = status === "rejected" ? "high" : status === "needs_changes" ? "medium" : "low";
   addReview(project, "LayoutReviewer", status, confidence, risk_level, issues);
   addHistory(project, "LayoutReviewer", "reviewed_layout", { status, issue_count: issues.length });
-
-  return {
-    project,
-    status,
-    confidence,
-    risk_level,
-    issues,
-    summary: `Layout review: ${status} (${issues.length} issues)`
-  };
+  return { project, status, confidence, risk_level, issues, summary: `Layout review: ${status} (${issues.length} issues)` };
 }
 
-/**
- * Combined review step used by the orchestrator.
- * Returns whether a revision is requested and which stage should be re-run.
- */
-function runReviewers(project) {
-  const schReview = runSchematicReviewer(project);
-  project = schReview.project;
+function runPowerThermalReviewer(project) {
+  const issues = [];
+  let confidence = 0.7;
+  let status = "approved";
 
-  const layReview = runLayoutReviewer(project);
-  project = layReview.project;
+  const arch = project.architecture;
+  const bom = project.bom;
+  const constraints = project.user_intent?.parsed_constraints || {};
 
-  const reviews = [schReview, layReview];
-  const needsRevision = reviews.some(r => r.status === "needs_changes" || r.status === "rejected");
-
-  // Decide which stage to send back to (simple policy)
-  let revisionTarget = null;
-  if (schReview.status !== "approved") {
-    revisionTarget = "schematic"; // re-run schematic (and later layout)
-  } else if (layReview.status !== "approved") {
-    revisionTarget = "pcb";
+  if (!arch) {
+    issues.push("No architecture for power/thermal review");
+    status = "needs_changes";
+    confidence = 0.3;
+  } else {
+    if (constraints.form_factor === "wearable" && arch.mcu_family === "esp32") {
+      issues.push("ESP32 may be thermally and power-hungry for a small wearable – consider nRF52");
+      status = "needs_changes";
+      confidence -= 0.12;
+    }
+    if (arch.power_architecture === "battery" && !bom?.line_items?.some(i => i.category === "Power")) {
+      issues.push("Battery power selected but no power-management parts in BOM");
+      status = "needs_changes";
+      confidence -= 0.15;
+    }
+    if ((constraints.sensors || []).includes("gps") && constraints.power === "battery") {
+      issues.push("GPS + battery can drain quickly – ensure aggressive power management");
+      if (status === "approved") status = "needs_changes";
+      confidence -= 0.08;
+    }
   }
 
-  const overallConfidence =
-    reviews.reduce((s, r) => s + r.confidence, 0) / reviews.length;
+  confidence = Math.max(0.25, Math.min(confidence, 0.92));
+  const risk_level = status === "needs_changes" ? "medium" : "low";
+  addReview(project, "PowerThermalReviewer", status, confidence, risk_level, issues);
+  addHistory(project, "PowerThermalReviewer", "reviewed_power_thermal", { status, issue_count: issues.length });
+  return { project, status, confidence, risk_level, issues, summary: `Power/Thermal review: ${status} (${issues.length} issues)` };
+}
 
-  const overallRisk = reviews.some(r => r.risk_level === "high")
+function runDFMReviewer(project) {
+  const issues = [];
+  let confidence = 0.7;
+  let status = "approved";
+  const pcb = project.pcb;
+  const bom = project.bom;
+
+  if (!pcb) {
+    issues.push("No PCB for DFM review");
+    status = "needs_changes";
+    confidence = 0.3;
+  } else {
+    if (pcb.layers === 2 && (pcb.placements?.length || 0) > 14) {
+      issues.push("Dense 2-layer board – DFM and yield risk; prefer 4 layers");
+      status = "needs_changes";
+      confidence -= 0.12;
+    }
+    if (pcb.outline.width_mm < 20 || pcb.outline.height_mm < 15) {
+      issues.push("Very small board – check fab minimum size and handling");
+      if (status === "approved") status = "needs_changes";
+      confidence -= 0.08;
+    }
+    const hasModule = bom?.line_items?.some(i => (i.package || "").toLowerCase().includes("module"));
+    if (hasModule && pcb.layers < 4) {
+      issues.push("RF / module parts often benefit from ground planes on 4-layer stackups");
+      if (status === "approved") status = "needs_changes";
+      confidence -= 0.06;
+    }
+  }
+
+  confidence = Math.max(0.25, Math.min(confidence, 0.92));
+  const risk_level = status === "needs_changes" ? "medium" : "low";
+  addReview(project, "DFMReviewer", status, confidence, risk_level, issues);
+  addHistory(project, "DFMReviewer", "reviewed_dfm", { status, issue_count: issues.length });
+  return { project, status, confidence, risk_level, issues, summary: `DFM review: ${status} (${issues.length} issues)` };
+}
+
+function runReviewers(project) {
+  const results = [];
+
+  let r = runSchematicReviewer(project);
+  project = r.project;
+  results.push(r);
+
+  r = runLayoutReviewer(project);
+  project = r.project;
+  results.push(r);
+
+  r = runPowerThermalReviewer(project);
+  project = r.project;
+  results.push(r);
+
+  r = runDFMReviewer(project);
+  project = r.project;
+  results.push(r);
+
+  const needsRevision = results.some(x => x.status === "needs_changes" || x.status === "rejected");
+
+  let revisionTarget = null;
+  if (results[0].status !== "approved") revisionTarget = "schematic";
+  else if (results[1].status !== "approved" || results[3].status !== "approved") revisionTarget = "pcb";
+  else if (results[2].status !== "approved") revisionTarget = "schematic"; // power issues often need arch/schematic rethink
+
+  const overallConfidence = results.reduce((s, x) => s + x.confidence, 0) / results.length;
+  const overallRisk = results.some(x => x.risk_level === "high")
     ? "high"
-    : reviews.some(r => r.risk_level === "medium")
+    : results.some(x => x.risk_level === "medium")
       ? "medium"
       : "low";
 
@@ -156,15 +205,17 @@ function runReviewers(project) {
     project,
     needsRevision,
     revisionTarget,
-    reviews,
+    reviews: results,
     confidence: overallConfidence,
     risk_level: overallRisk,
-    summary: `Reviews complete. Revision needed: ${needsRevision}${revisionTarget ? ` (target: ${revisionTarget})` : ""}`
+    summary: `Reviews complete (${results.length} reviewers). Revision needed: ${needsRevision}${revisionTarget ? ` → ${revisionTarget}` : ""}`
   };
 }
 
 module.exports = {
   runSchematicReviewer,
   runLayoutReviewer,
+  runPowerThermalReviewer,
+  runDFMReviewer,
   runReviewers
 };

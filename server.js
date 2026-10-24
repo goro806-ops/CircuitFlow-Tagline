@@ -23,12 +23,20 @@ const ngspiceEngine = require('./src/engine/ngspice');
 const exportEngine = require('./src/engine/export');
 const businessEngine = require('./src/engine/business');
 
+// Multi-agent system API
+const agentsApi = require('./src/agents/api');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ---------------------------------------------------------------
+// Multi-agent pipeline API (new)
+// ---------------------------------------------------------------
+app.use('/api/agents', agentsApi);
 
 // Business & Monetization Endpoints
 app.get('/api/business/pricing', (req, res) => {
@@ -60,7 +68,7 @@ app.post('/api/business/turnkey-quote', (req, res) => {
   }
 });
 
-// API Routes
+// Legacy / existing API Routes
 app.post('/api/generate/architecture', async (req, res) => {
   try {
     const { prompt, constraints, apiKey, provider } = req.body;
@@ -92,7 +100,6 @@ app.get('/api/components/search', async (req, res) => {
   }
 });
 
-// Database & Project Persistence Endpoints
 app.post('/api/projects/save', (req, res) => {
   try {
     const projectData = req.body || {};
@@ -259,6 +266,7 @@ app.post('/api/export/package', async (req, res) => {
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`CircuitFlow Platform running at http://localhost:${PORT}`);
+    console.log(`Multi-agent API: POST http://localhost:${PORT}/api/agents/run`);
   });
 }
 

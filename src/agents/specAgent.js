@@ -1,55 +1,46 @@
 /**
  * SpecAgent
  * Parses the user's natural language request into structured constraints.
- * This is the first agent in almost every flow.
+ * Uses LLM when OPENAI_API_KEY is available, otherwise falls back to rules.
  */
 
 const { addHistory } = require("./state");
+const { isLLMEnabled, llmExtractConstraints } = require("./llm");
 
-/**
- * Very simple rule-based parser for the first version.
- * Later this will call a real LLM with a structured output schema.
- */
-function runSpecAgent(project) {
-  const text = (project.user_intent.raw_text || "").toLowerCase();
-  const constraints = project.user_intent.parsed_constraints;
+function ruleBasedParse(text) {
+  const lower = (text || "").toLowerCase();
+  const constraints = {
+    target_cost: null,
+    form_factor: null,
+    power: null,
+    wireless: null,
+    sensors: [],
+    mcu_preference: null,
+    other: {}
+  };
 
-  // --- crude but useful extraction for common hardware intents ---
+  const costMatch = lower.match(/under\s*\$?(\d+)/i) || lower.match(/less than\s*\$?(\d+)/i);
+  if (costMatch) constraints.target_cost = parseInt(costMatch[1], 10);
 
-  // Cost
-  const costMatch = text.match(/under\s*\$?(\d+)/i) || text.match(/less than\s*\$?(\d+)/i);
-  if (costMatch) {
-    constraints.target_cost = parseInt(costMatch[1], 10);
-  }
-
-  // Form factor / wearable
-  if (text.includes("wearable") || text.includes("watch") || text.includes("band")) {
+  if (lower.includes("wearable") || lower.includes("watch") || lower.includes("band")) {
     constraints.form_factor = "wearable";
-  } else if (text.includes("handheld") || text.includes("portable")) {
+  } else if (lower.includes("handheld") || lower.includes("portable")) {
     constraints.form_factor = "handheld";
-  } else if (text.includes("module") || text.includes("board")) {
+  } else if (lower.includes("module") || lower.includes("board")) {
     constraints.form_factor = "module";
   }
 
-  // Power
-  if (text.includes("battery") || text.includes("coin cell") || text.includes("lipo")) {
+  if (lower.includes("battery") || lower.includes("coin cell") || lower.includes("lipo")) {
     constraints.power = "battery";
-  } else if (text.includes("usb") || text.includes("mains")) {
+  } else if (lower.includes("usb") || lower.includes("mains")) {
     constraints.power = "usb_or_mains";
   }
 
-  // Wireless
-  if (text.includes("bluetooth") || text.includes("ble")) {
-    constraints.wireless = "ble";
-  } else if (text.includes("wifi") || text.includes("wi-fi")) {
-    constraints.wireless = "wifi";
-  } else if (text.includes("lora") || text.includes("lorawan")) {
-    constraints.wireless = "lora";
-  } else if (text.includes("cellular") || text.includes("lte") || text.includes("nbiot")) {
-    constraints.wireless = "cellular";
-  }
+  if (lower.includes("bluetooth") || lower.includes("ble")) constraints.wireless = "ble";
+  else if (lower.includes("wifi") || lower.includes("wi-fi")) constraints.wireless = "wifi";
+  else if (lower.includes("lora") || lower.includes("lorawan")) constraints.wireless = "lora";
+  else if (lower.includes("cellular") || lower.includes("lte") || lower.includes("nbiot")) constraints.wireless = "cellular";
 
-  // Sensors (simple keyword list)
   const sensorKeywords = [
     { key: "imu", words: ["imu", "accelerometer", "gyro", "6-axis", "9-axis"] },
     { key: "temperature", words: ["temperature", "temp sensor"] },
@@ -62,32 +53,56 @@ function runSpecAgent(project) {
   ];
 
   sensorKeywords.forEach(({ key, words }) => {
-    if (words.some(w => text.includes(w))) {
-      if (!constraints.sensors.includes(key)) {
-        constraints.sensors.push(key);
-      }
+    if (words.some(w => lower.includes(w)) && !constraints.sensors.includes(key)) {
+      constraints.sensors.push(key);
     }
   });
 
-  // MCU preference hints
-  if (text.includes("esp32")) constraints.mcu_preference = "esp32";
-  else if (text.includes("stm32")) constraints.mcu_preference = "stm32";
-  else if (text.includes("nrf52") || text.includes("nrf52840")) constraints.mcu_preference = "nrf52";
-  else if (text.includes("rp2040") || text.includes("pico")) constraints.mcu_preference = "rp2040";
+  if (lower.includes("esp32")) constraints.mcu_preference = "esp32";
+  else if (lower.includes("stm32")) constraints.mcu_preference = "stm32";
+  else if (lower.includes("nrf52") || lower.includes("nrf52840")) constraints.mcu_preference = "nrf52";
+  else if (lower.includes("rp2040") || lower.includes("pico")) constraints.mcu_preference = "rp2040";
 
-  // Confidence – higher when we extracted several useful constraints
-  let extracted = 0;
-  if (constraints.target_cost) extracted++;
-  if (constraints.form_factor) extracted++;
-  if (constraints.power) extracted++;
-  if (constraints.wireless) extracted++;
-  if (constraints.sensors.length > 0) extracted++;
-  if (constraints.mcu_preference) extracted++;
+  return constraints;
+}
 
-  const confidence = Math.min(0.55 + extracted * 0.08, 0.92);
+async function runSpecAgent(project) {
+  const raw = project.user_intent.raw_text || "";
+  let constraints = ruleBasedParse(raw);
+  let source = "rules";
+  let confidence = 0.6;
+
+  if (isLLMEnabled()) {
+    const llmResult = await llmExtractConstraints(raw);
+    if (llmResult && typeof llmResult === "object") {
+      constraints = {
+        target_cost: llmResult.target_cost ?? constraints.target_cost,
+        form_factor: llmResult.form_factor ?? constraints.form_factor,
+        power: llmResult.power ?? constraints.power,
+        wireless: llmResult.wireless ?? constraints.wireless,
+        sensors: Array.isArray(llmResult.sensors) ? llmResult.sensors : constraints.sensors,
+        mcu_preference: llmResult.mcu_preference ?? constraints.mcu_preference,
+        other: { notes: llmResult.notes || null }
+      };
+      source = "llm";
+      confidence = 0.82;
+    }
+  } else {
+    // Rule-based confidence based on how much we extracted
+    let extracted = 0;
+    if (constraints.target_cost) extracted++;
+    if (constraints.form_factor) extracted++;
+    if (constraints.power) extracted++;
+    if (constraints.wireless) extracted++;
+    if (constraints.sensors.length > 0) extracted++;
+    if (constraints.mcu_preference) extracted++;
+    confidence = Math.min(0.55 + extracted * 0.08, 0.92);
+  }
+
+  project.user_intent.parsed_constraints = constraints;
 
   addHistory(project, "SpecAgent", "parsed_constraints", {
-    extracted_count: extracted,
+    source,
     confidence
   });
 
@@ -95,7 +110,7 @@ function runSpecAgent(project) {
     project,
     confidence,
     risk_level: confidence > 0.7 ? "low" : "medium",
-    summary: `Extracted ${extracted} constraint groups from user prompt.`
+    summary: `Extracted constraints via ${source}.`
   };
 }
 
