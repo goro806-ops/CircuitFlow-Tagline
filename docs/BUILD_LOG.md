@@ -1,43 +1,36 @@
 # CircuitFlow Build Log
 
-## Current multi-agent system (v1.4)
+## Current system (v1.4 + UI)
 
 ### Design agents
-- SpecAgent (rules + optional LLM)
-- ArchitectureAgent
-- ComponentAgent
-- SchematicAgent
-- PCBLayoutAgent
-- **FirmwareAgent** (scaffold)
-- **EnclosureAgent** (parametric shell)
+Spec, Architecture, Component, Schematic, PCB, Firmware, Enclosure
 
 ### Reviewers
-- Schematic, Layout, PowerThermal, DFM
+Schematic, Layout, PowerThermal, DFM + revision loops
 
 ### Infrastructure
-- LangGraph + revision loops + risk + human escalation
-- Checkpointing (MemorySaver) + disk persistence
-- HTTP API `/api/agents/*`
+LangGraph, risk/escalation, MemorySaver, disk persistence, HTTP API
 
-### Pipeline
-```
-Spec → Architecture → Component → Schematic → PCB
-  → Firmware → Enclosure → Reviewers → (revise) → Risk → Escalate|Finish
-```
+### Web UI
+- **`/agents.html`** – Multi-agent designer UI
+  - Prompt input + example chips
+  - Runs `POST /api/agents/run`
+  - Shows constraints, architecture, BOM, PCB, firmware, enclosure, reviews
+  - Lists and reloads saved projects from disk
 
-### Run
+### How to use
 ```bash
 npm install
-npm run agents:example
-npm start   # API on :3000
+npm start
+# open http://localhost:3000/agents.html
 ```
 
-### Optional LLM
+CLI still works:
 ```bash
-export OPENAI_API_KEY=sk-...
+npm run agents:example
 ```
 
 ### Next ideas
-- Simple web UI for `/api/agents/run`
 - More LLM in ComponentAgent / Reviewers
 - SqliteSaver durable checkpoints
+- Polish legacy index.html to link to agents UI

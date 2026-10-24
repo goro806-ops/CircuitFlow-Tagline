@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CircuitFlow – Multi-Agent Designer</title>
+  <link rel="stylesheet" href="/agents.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <span class="logo">⚡</span>
+        <div>
+          <h1>CircuitFlow</h1>
+          <p class="tagline">Multi-agent hardware design pipeline</p>
+        </div>
+      </div>
+      <div class="header-meta">
+        <span id="statusBadge" class="badge">checking…</span>
+        <a href="/" class="link">Legacy demo</a>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel input-panel">
+        <h2>Describe your hardware</h2>
+        <textarea id="prompt" rows="5" placeholder="e.g. Bluetooth Low Energy wearable tracker with 6-axis IMU, battery powered, under $15 BOM"></textarea>
+        <div class="examples">
+          <button type="button" class="chip" data-prompt="Bluetooth Low Energy wearable tracker with 6-axis IMU, battery powered, under $15 BOM">BLE wearable + IMU</button>
+          <button type="button" class="chip" data-prompt="ESP32 WiFi environmental sensor node with temperature and humidity, USB powered, module form factor">ESP32 env sensor</button>
+          <button type="button" class="chip" data-prompt="nRF52 BLE heart rate monitor, battery powered wearable, under $12 BOM">HR wearable</button>
+        </div>
+        <button id="runBtn" class="btn primary" type="button">Run multi-agent pipeline</button>
+        <p id="runHint" class="hint">Runs Spec → Architecture → BOM → Schematic → PCB → Firmware → Enclosure → Reviewers</p>
+      </section>
+
+      <section class="panel results-panel">
+        <div id="emptyState" class="empty">
+          <p>Results will appear here after you run a design.</p>
+        </div>
+
+        <div id="loadingState" class="loading hidden">
+          <div class="spinner"></div>
+          <p>Agents working… this may take a few seconds.</p>
+        </div>
+
+        <div id="errorState" class="error hidden"></div>
+
+        <div id="results" class="results hidden">
+          <div class="result-header">
+            <div>
+              <h2 id="resultTitle">Project</h2>
+              <p class="meta" id="resultMeta"></p>
+            </div>
+            <span id="resultStatus" class="badge"></span>
+          </div>
+
+          <div class="grid">
+            <article class="card">
+              <h3>Constraints</h3>
+              <pre id="constraintsOut"></pre>
+            </article>
+            <article class="card">
+              <h3>Architecture</h3>
+              <pre id="archOut"></pre>
+            </article>
+            <article class="card">
+              <h3>BOM estimate</h3>
+              <pre id="bomOut"></pre>
+            </article>
+            <article class="card">
+              <h3>PCB</h3>
+              <pre id="pcbOut"></pre>
+            </article>
+            <article class="card">
+              <h3>Firmware</h3>
+              <pre id="fwOut"></pre>
+            </article>
+            <article class="card">
+              <h3>Enclosure</h3>
+              <pre id="encOut"></pre>
+            </article>
+          </div>
+
+          <article class="card full">
+            <h3>Reviews &amp; escalation</h3>
+            <pre id="reviewsOut"></pre>
+          </article>
+
+          <details class="raw">
+            <summary>Full project JSON</summary>
+            <pre id="rawOut"></pre>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <section class="panel projects-panel">
+      <div class="projects-header">
+        <h2>Saved projects</h2>
+        <button id="refreshProjects" class="btn ghost" type="button">Refresh</button>
+      </div>
+      <ul id="projectList" class="project-list"></ul>
+    </section>
+  </div>
+  <script src="/agents.js"></script>
+</body>
+</html>
