@@ -1,36 +1,28 @@
 # CircuitFlow Build Log
 
-## Current system (v1.4 + UI)
+## v1.5 – LLM, durable checkpoints, UI link
 
-### Design agents
-Spec, Architecture, Component, Schematic, PCB, Firmware, Enclosure
+### 1. More LLM usage
+- **ComponentAgent**: optional `llmSuggestBom` merges LLM part suggestions into the rule-based BOM
+- **Reviewers**: optional **LLMReviewer** adds an overall design critique when `OPENAI_API_KEY` is set
+- SpecAgent still uses LLM for constraint extraction
 
-### Reviewers
-Schematic, Layout, PowerThermal, DFM + revision loops
+### 2. Durable checkpoints
+- `src/agents/checkpointer.js`
+- Tries **SqliteSaver** (`@langchain/langgraph-checkpoint-sqlite`) → `data/checkpoints.sqlite`
+- Falls back to **MemorySaver** if the package is missing
+- Override path with `CIRCUITFLOW_CHECKPOINT_DB`
 
-### Infrastructure
-LangGraph, risk/escalation, MemorySaver, disk persistence, HTTP API
+### 3. Homepage → agents UI
+- Legacy `index.html` header links to **Multi-Agent Designer** (`/agents.html`)
 
-### Web UI
-- **`/agents.html`** – Multi-agent designer UI
-  - Prompt input + example chips
-  - Runs `POST /api/agents/run`
-  - Shows constraints, architecture, BOM, PCB, firmware, enclosure, reviews
-  - Lists and reloads saved projects from disk
-
-### How to use
+### Run
 ```bash
 npm install
 npm start
-# open http://localhost:3000/agents.html
-```
+# http://localhost:3000/agents.html
+# http://localhost:3000/  (legacy + link)
 
-CLI still works:
-```bash
+export OPENAI_API_KEY=sk-...   # optional LLM
 npm run agents:example
 ```
-
-### Next ideas
-- More LLM in ComponentAgent / Reviewers
-- SqliteSaver durable checkpoints
-- Polish legacy index.html to link to agents UI

@@ -1,13 +1,11 @@
 /**
- * LangGraph Orchestrator (v1.4)
- * Spec → Architecture → Component → Schematic → PCB
- *   → Firmware + Enclosure (after PCB)
- *   → Reviewers → revision loops → Risk → Escalate | Finish
+ * LangGraph Orchestrator (v1.5)
+ * Durable checkpoints (Sqlite when available) + async Component/Reviewers LLM.
  */
 
 const fs = require("fs");
 const path = require("path");
-const { StateGraph, END, START, Annotation, MemorySaver } = require("@langchain/langgraph");
+const { StateGraph, END, START, Annotation } = require("@langchain/langgraph");
 const { createEmptyProject, addHistory } = require("./state");
 const { runSpecAgent } = require("./specAgent");
 const { runArchitectureAgent } = require("./architectureAgent");
@@ -19,6 +17,7 @@ const { runEnclosureAgent } = require("./enclosureAgent");
 const { runReviewers } = require("./reviewers");
 const { aggregateRisk } = require("./risk");
 const { runHumanEscalationAgent } = require("./humanEscalationAgent");
+const { createCheckpointer } = require("./checkpointer");
 
 const PROJECTS_DIR = path.join(process.cwd(), "data", "projects");
 const MAX_REVISIONS = 2;
@@ -77,8 +76,8 @@ function architectureNode(state) {
   };
 }
 
-function componentNode(state) {
-  const r = runComponentAgent(state.project);
+async function componentNode(state) {
+  const r = await runComponentAgent(state.project);
   return {
     project: r.project,
     agentResults: { agent: "ComponentAgent", confidence: r.confidence, risk_level: r.risk_level, summary: r.summary },
@@ -122,8 +121,8 @@ function enclosureNode(state) {
   };
 }
 
-function reviewNode(state) {
-  const r = runReviewers(state.project);
+async function reviewNode(state) {
+  const r = await runReviewers(state.project);
   return {
     project: r.project,
     revisionTarget: r.needsRevision ? r.revisionTarget : null,
@@ -188,7 +187,7 @@ function finishNode(state) {
     });
   }
 
-  addHistory(project, "Orchestrator", "pipeline_complete_langgraph_v1.4", {
+  addHistory(project, "Orchestrator", "pipeline_complete_langgraph_v1.5", {
     agents_run: (state.agentResults || []).map(r => r.agent),
     overall_confidence: state.aggregation?.overall_confidence,
     overall_risk: state.aggregation?.overall_risk,
@@ -243,18 +242,12 @@ function buildGraph(checkpointer = null) {
       risk: "risk"
     })
 
-    // After schematic revision, continue to pcb → firmware → enclosure → review
-    // (edges from schematic/pcb already defined above; revision re-enters those nodes)
-
     .addConditionalEdges("risk", shouldEscalate, {
       escalate: "escalate",
       finish: "finish"
     })
     .addEdge("escalate", "finish")
     .addEdge("finish", END);
-
-  // Note: when revision goes back to schematic, flow is schematic→pcb→firmware→enclosure→review again
-  // when revision goes to pcb only: pcb→firmware→enclosure→review
 
   if (checkpointer) return graph.compile({ checkpointer });
   return graph.compile();
@@ -263,14 +256,14 @@ function buildGraph(checkpointer = null) {
 async function runPipeline(userPrompt, options = {}) {
   const threadId = options.threadId || `thread_${Date.now().toString(36)}`;
 
-  console.log("\n=== CircuitFlow LangGraph Orchestrator (v1.4) ===");
+  console.log("\n=== CircuitFlow LangGraph Orchestrator (v1.5) ===");
   console.log(`User prompt: "${userPrompt}"`);
   console.log(`Thread ID:   ${threadId}\n`);
 
   const project = createEmptyProject(userPrompt);
   console.log(`Project ID:  ${project.project_id}`);
 
-  const checkpointer = new MemorySaver();
+  const { checkpointer, type } = createCheckpointer();
   const app = buildGraph(checkpointer);
 
   const finalState = await app.invoke(
@@ -288,7 +281,8 @@ async function runPipeline(userPrompt, options = {}) {
   console.log("\n--- Agent Log ---");
   (finalState.logs || []).forEach(line => console.log(line));
 
-  console.log("\n=== Pipeline finished (LangGraph v1.4) ===");
+  console.log("\n=== Pipeline finished (LangGraph v1.5) ===");
+  console.log(`Checkpointer: ${type}`);
   console.log(`Final status: ${finalState.project.status}`);
   console.log(`Revisions:    ${finalState.revisionCount || 0}`);
   console.log(`History:      ${finalState.project.history.length} entries`);
@@ -297,6 +291,7 @@ async function runPipeline(userPrompt, options = {}) {
   }
 
   finalState.project._thread_id = threadId;
+  finalState.project._checkpointer = type;
   return finalState.project;
 }
 

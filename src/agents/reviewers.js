@@ -1,11 +1,10 @@
 /**
- * AI Expert Reviewer Agents (v1)
- *
- * SchematicReviewer, LayoutReviewer, PowerThermalReviewer, DFMReviewer
- * + combined runReviewers() used by the orchestrator.
+ * AI Expert Reviewer Agents (v1.1)
+ * Rule-based reviewers + optional LLM overall review.
  */
 
 const { addHistory, addReview } = require("./state");
+const { isLLMEnabled, llmReviewProject } = require("./llm");
 
 function runSchematicReviewer(project) {
   const issues = [];
@@ -97,7 +96,6 @@ function runPowerThermalReviewer(project) {
   const issues = [];
   let confidence = 0.7;
   let status = "approved";
-
   const arch = project.architecture;
   const bom = project.bom;
   const constraints = project.user_intent?.parsed_constraints || {};
@@ -168,7 +166,48 @@ function runDFMReviewer(project) {
   return { project, status, confidence, risk_level, issues, summary: `DFM review: ${status} (${issues.length} issues)` };
 }
 
-function runReviewers(project) {
+async function runLLMReviewer(project) {
+  if (!isLLMEnabled()) return null;
+
+  const snapshot = {
+    constraints: project.user_intent?.parsed_constraints,
+    architecture: project.architecture && {
+      mcu: project.architecture.mcu_family,
+      wireless: project.architecture.wireless,
+      power: project.architecture.power_architecture
+    },
+    bom_estimate: project.bom?.estimated_total,
+    pcb: project.pcb && {
+      size: project.pcb.outline,
+      layers: project.pcb.layers,
+      placements: project.pcb.placements?.length,
+      issues: project.pcb.issues
+    },
+    schematic_issues: project.schematic?.issues
+  };
+
+  const llm = await llmReviewProject(snapshot);
+  if (!llm) return null;
+
+  const status = llm.overall === "needs_changes" ? "needs_changes" : "approved";
+  const issues = Array.isArray(llm.issues) ? llm.issues : [];
+  const confidence = status === "approved" ? 0.78 : 0.55;
+  const risk_level = status === "needs_changes" ? "medium" : "low";
+
+  addReview(project, "LLMReviewer", status, confidence, risk_level, issues);
+  addHistory(project, "LLMReviewer", "reviewed_llm", { status, issue_count: issues.length });
+
+  return {
+    project,
+    status,
+    confidence,
+    risk_level,
+    issues,
+    summary: `LLM review: ${status} (${issues.length} issues)`
+  };
+}
+
+async function runReviewers(project) {
   const results = [];
 
   let r = runSchematicReviewer(project);
@@ -187,12 +226,19 @@ function runReviewers(project) {
   project = r.project;
   results.push(r);
 
+  const llmR = await runLLMReviewer(project);
+  if (llmR) {
+    project = llmR.project;
+    results.push(llmR);
+  }
+
   const needsRevision = results.some(x => x.status === "needs_changes" || x.status === "rejected");
 
   let revisionTarget = null;
   if (results[0].status !== "approved") revisionTarget = "schematic";
   else if (results[1].status !== "approved" || results[3].status !== "approved") revisionTarget = "pcb";
-  else if (results[2].status !== "approved") revisionTarget = "schematic"; // power issues often need arch/schematic rethink
+  else if (results[2].status !== "approved") revisionTarget = "schematic";
+  else if (llmR && llmR.status !== "approved") revisionTarget = "pcb";
 
   const overallConfidence = results.reduce((s, x) => s + x.confidence, 0) / results.length;
   const overallRisk = results.some(x => x.risk_level === "high")

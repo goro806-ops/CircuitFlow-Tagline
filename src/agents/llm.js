@@ -1,11 +1,6 @@
 /**
  * Optional LLM helper for CircuitFlow agents.
- *
- * If OPENAI_API_KEY is set, agents can call a real model.
- * Otherwise they fall back to rule-based logic.
- *
- * This keeps the system usable without any paid API key
- * while making it easy to upgrade quality later.
+ * Enabled when OPENAI_API_KEY or CIRCUITFLOW_OPENAI_KEY is set.
  */
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.CIRCUITFLOW_OPENAI_KEY;
@@ -15,10 +10,6 @@ function isLLMEnabled() {
   return Boolean(OPENAI_API_KEY);
 }
 
-/**
- * Call OpenAI chat completions (simple JSON-friendly helper).
- * Returns the assistant text content, or null on failure / disabled.
- */
 async function callLLM(systemPrompt, userPrompt, options = {}) {
   if (!isLLMEnabled()) return null;
 
@@ -54,10 +45,6 @@ async function callLLM(systemPrompt, userPrompt, options = {}) {
   }
 }
 
-/**
- * Ask the LLM to extract structured constraints from a hardware prompt.
- * Returns an object or null.
- */
 async function llmExtractConstraints(rawText) {
   const system = `You are a senior hardware engineer. Extract structured design constraints from the user request.
 Return ONLY valid JSON with these fields (use null when unknown):
@@ -73,7 +60,56 @@ Return ONLY valid JSON with these fields (use null when unknown):
 
   const content = await callLLM(system, rawText, { json: true, temperature: 0.1 });
   if (!content) return null;
+  try {
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
 
+/**
+ * Suggest BOM line items / alternates from architecture + constraints.
+ */
+async function llmSuggestBom(architecture, constraints) {
+  const system = `You are a hardware sourcing engineer. Suggest a concise BOM for the given architecture.
+Return ONLY valid JSON:
+{
+  "items": [
+    { "category": "MCU"|"Sensor"|"Power"|"Passive"|"Other", "mpn": string, "manufacturer": string, "description": string, "approx_price_usd": number, "notes": string }
+  ],
+  "notes": string
+}
+Prefer commonly available parts. Keep the list under 12 items.`;
+
+  const user = JSON.stringify({ architecture, constraints }, null, 2);
+  const content = await callLLM(system, user, { json: true, temperature: 0.2 });
+  if (!content) return null;
+  try {
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extra review comments from an LLM given project snapshot.
+ */
+async function llmReviewProject(snapshot) {
+  const system = `You are a senior hardware design reviewer.
+Given a project snapshot, list concrete issues (if any).
+Return ONLY valid JSON:
+{
+  "issues": string[],
+  "overall": "approved" | "needs_changes",
+  "notes": string
+}
+Be practical and brief. If the design looks reasonable for an early prototype, approve it.`;
+
+  const content = await callLLM(system, JSON.stringify(snapshot, null, 2), {
+    json: true,
+    temperature: 0.15
+  });
+  if (!content) return null;
   try {
     return JSON.parse(content);
   } catch {
@@ -84,5 +120,7 @@ Return ONLY valid JSON with these fields (use null when unknown):
 module.exports = {
   isLLMEnabled,
   callLLM,
-  llmExtractConstraints
+  llmExtractConstraints,
+  llmSuggestBom,
+  llmReviewProject
 };
