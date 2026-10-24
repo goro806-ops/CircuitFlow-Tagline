@@ -3,19 +3,14 @@
  *
  * Usage:
  *   node src/agents/run.js "Your hardware idea here"
- *
- * By default uses the LangGraph orchestrator with checkpointing.
- * Fallback to the classic linear orchestrator with:
- *   USE_CLASSIC=1 node src/agents/run.js "..."
- *
- * Load a previously saved project:
  *   node src/agents/run.js --load proj_xxxxx
+ *
+ * USE_CLASSIC=1 forces the old linear orchestrator.
  */
 
 async function main() {
   const args = process.argv.slice(2);
 
-  // Load existing project from disk
   if (args[0] === "--load" && args[1]) {
     try {
       const { loadProject } = require("./langgraphOrchestrator");
@@ -28,6 +23,11 @@ async function main() {
         architecture_mcu: project.architecture?.mcu_family,
         bom_estimate: project.bom?.estimated_total,
         schematic_components: project.schematic?.components?.length,
+        pcb: project.pcb ? {
+          size_mm: `${project.pcb.outline.width_mm}×${project.pcb.outline.height_mm}`,
+          layers: project.pcb.layers,
+          placements: project.pcb.placements?.length
+        } : null,
         needs_human: !!project.escalation,
         history_length: project.history?.length
       }, null, 2));
@@ -53,7 +53,7 @@ async function main() {
       try {
         ({ runPipeline } = require("./langgraphOrchestrator"));
       } catch (err) {
-        console.warn("LangGraph orchestrator not available (missing dependencies?). Falling back to classic.");
+        console.warn("LangGraph orchestrator not available. Falling back to classic.");
         console.warn("Run: npm install @langchain/langgraph @langchain/core\n");
         ({ runPipeline } = require("./orchestrator"));
       }
@@ -70,12 +70,20 @@ async function main() {
       bom_estimate: project.bom?.estimated_total,
       schematic_components: project.schematic?.components?.length,
       schematic_nets: project.schematic?.nets?.length,
+      pcb: project.pcb ? {
+        size_mm: `${project.pcb.outline.width_mm}×${project.pcb.outline.height_mm}`,
+        layers: project.pcb.layers,
+        placements: project.pcb.placements?.length,
+        issues: project.pcb.issues?.length
+      } : null,
       needs_human: !!project.escalation,
       history_length: project.history.length,
       thread_id: project._thread_id || null
     }, null, 2));
 
-    console.log(`\nProject saved under: data/projects/${project.project_id}.json`);
+    if (project.project_id) {
+      console.log(`\nProject saved under: data/projects/${project.project_id}.json`);
+    }
 
   } catch (err) {
     console.error("\nPipeline failed:", err);
