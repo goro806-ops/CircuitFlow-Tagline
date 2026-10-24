@@ -22,13 +22,32 @@ function listSavedProjects() {
           status: data.status,
           created_at: data.created_at,
           updated_at: data.updated_at,
-          prompt: data.user_intent?.raw_text?.slice(0, 120)
+          prompt: data.user_intent?.raw_text?.slice(0, 120),
+          needs_human: data.status === "needs_human" || !!data.escalation
         };
       } catch {
         return null;
       }
     })
     .filter(Boolean);
+}
+
+function loadProjectFile(id) {
+  const filePath = path.join(PROJECTS_DIR, `${id}.json`);
+  if (!fs.existsSync(filePath)) {
+    const err = new Error(`Project not found: ${id}`);
+    err.status = 404;
+    throw err;
+  }
+  return { filePath, project: JSON.parse(fs.readFileSync(filePath, "utf8")) };
+}
+
+function saveProjectFile(project) {
+  if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+  const filePath = path.join(PROJECTS_DIR, `${project.project_id}.json`);
+  project.updated_at = new Date().toISOString();
+  fs.writeFileSync(filePath, JSON.stringify(project, null, 2), "utf8");
+  return filePath;
 }
 
 router.post("/run", async (req, res) => {
@@ -66,7 +85,7 @@ router.post("/run", async (req, res) => {
         firmware_modules: project.firmware?.modules?.length,
         enclosure: project.enclosure?.outer_mm,
         reviews: project.reviews?.length || 0,
-        needs_human: !!project.escalation
+        needs_human: !!project.escalation || project.status === "needs_human"
       },
       project
     });
@@ -86,11 +105,85 @@ router.get("/projects", (req, res) => {
 
 router.get("/projects/:id", (req, res) => {
   try {
-    const { loadProject } = require("./langgraphOrchestrator");
-    const project = loadProject(req.params.id);
+    const { project } = loadProjectFile(req.params.id);
     res.json({ success: true, project });
   } catch (err) {
-    res.status(404).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Export full project JSON as download
+ */
+router.get("/projects/:id/export", (req, res) => {
+  try {
+    const { project } = loadProjectFile(req.params.id);
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${project.project_id}.json"`
+    );
+    res.send(JSON.stringify(project, null, 2));
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Record human review decision for escalated projects
+ * Body: { decision, comments?, reviewed_by? }
+ * decision: approved | changes_requested | rejected
+ */
+router.post("/projects/:id/review", (req, res) => {
+  try {
+    const { decision, comments, reviewed_by } = req.body || {};
+    const allowed = ["approved", "changes_requested", "rejected"];
+    if (!allowed.includes(decision)) {
+      return res.status(400).json({
+        success: false,
+        error: `decision must be one of: ${allowed.join(", ")}`
+      });
+    }
+
+    const { project } = loadProjectFile(req.params.id);
+
+    if (!project.escalation) {
+      project.escalation = {
+        project_id: project.project_id,
+        status: "manual_review",
+        summary: { reasons_for_escalation: ["Manual review submitted via API"] }
+      };
+    }
+
+    project.escalation.human_decision = decision;
+    project.escalation.human_comments = comments || null;
+    project.escalation.reviewed_by = reviewed_by || "anonymous";
+    project.escalation.reviewed_at = new Date().toISOString();
+    project.escalation.status =
+      decision === "approved" ? "human_approved" : decision === "rejected" ? "human_rejected" : "human_changes_requested";
+
+    if (decision === "approved") project.status = "approved";
+    else if (decision === "rejected") project.status = "failed";
+    else project.status = "in_progress";
+
+    project.history = project.history || [];
+    project.history.push({
+      timestamp: new Date().toISOString(),
+      agent: "HumanReviewer",
+      action: "human_decision",
+      details: { decision, reviewed_by: project.escalation.reviewed_by }
+    });
+
+    saveProjectFile(project);
+
+    res.json({
+      success: true,
+      project_id: project.project_id,
+      status: project.status,
+      escalation: project.escalation
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -109,6 +202,7 @@ router.get("/status", (req, res) => {
   res.json({
     success: true,
     version: "1.5",
+    foundation: "complete",
     orchestrator: "langgraph-v1.5",
     llm_enabled: llm,
     checkpointer,
@@ -131,8 +225,11 @@ router.get("/status", (req, res) => {
       run: "POST /api/agents/run",
       projects: "GET /api/agents/projects",
       project: "GET /api/agents/projects/:id",
+      export: "GET /api/agents/projects/:id/export",
+      review: "POST /api/agents/projects/:id/review",
       status: "GET /api/agents/status",
-      ui: "/agents.html"
+      ui: "/agents.html",
+      docs: "/docs via repo docs/AGENTS.md"
     }
   });
 });

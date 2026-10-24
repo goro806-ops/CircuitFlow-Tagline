@@ -32,19 +32,12 @@
           <button type="button" class="chip" data-prompt="nRF52 BLE heart rate monitor, battery powered wearable, under $12 BOM">HR wearable</button>
         </div>
         <button id="runBtn" class="btn primary" type="button">Run multi-agent pipeline</button>
-        <p id="runHint" class="hint">Runs Spec → Architecture → BOM → Schematic → PCB → Firmware → Enclosure → Reviewers</p>
+        <p id="runHint" class="hint">Spec → Architecture → BOM → Schematic → PCB → Firmware → Enclosure → Reviewers</p>
       </section>
 
       <section class="panel results-panel">
-        <div id="emptyState" class="empty">
-          <p>Results will appear here after you run a design.</p>
-        </div>
-
-        <div id="loadingState" class="loading hidden">
-          <div class="spinner"></div>
-          <p>Agents working… this may take a few seconds.</p>
-        </div>
-
+        <div id="emptyState" class="empty"><p>Results will appear here after you run a design.</p></div>
+        <div id="loadingState" class="loading hidden"><div class="spinner"></div><p>Agents working…</p></div>
         <div id="errorState" class="error hidden"></div>
 
         <div id="results" class="results hidden">
@@ -53,45 +46,34 @@
               <h2 id="resultTitle">Project</h2>
               <p class="meta" id="resultMeta"></p>
             </div>
-            <span id="resultStatus" class="badge"></span>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <a id="exportLink" class="link hidden" href="#">Export JSON</a>
+              <span id="resultStatus" class="badge"></span>
+            </div>
+          </div>
+
+          <div id="humanReview" class="card full hidden" style="margin-bottom:12px;border-color:#f0b429;">
+            <h3>Human review required</h3>
+            <p class="hint" style="margin-top:0">This project was escalated. Record a decision:</p>
+            <input id="reviewBy" type="text" placeholder="Your name" style="width:100%;margin-bottom:8px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);" />
+            <textarea id="reviewComments" rows="2" placeholder="Comments (optional)" style="width:100%;margin-bottom:8px;"></textarea>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" id="approveBtn" class="btn primary" style="width:auto">Approve</button>
+              <button type="button" id="changesBtn" class="btn ghost">Request changes</button>
+              <button type="button" id="rejectBtn" class="btn ghost">Reject</button>
+            </div>
           </div>
 
           <div class="grid">
-            <article class="card">
-              <h3>Constraints</h3>
-              <pre id="constraintsOut"></pre>
-            </article>
-            <article class="card">
-              <h3>Architecture</h3>
-              <pre id="archOut"></pre>
-            </article>
-            <article class="card">
-              <h3>BOM estimate</h3>
-              <pre id="bomOut"></pre>
-            </article>
-            <article class="card">
-              <h3>PCB</h3>
-              <pre id="pcbOut"></pre>
-            </article>
-            <article class="card">
-              <h3>Firmware</h3>
-              <pre id="fwOut"></pre>
-            </article>
-            <article class="card">
-              <h3>Enclosure</h3>
-              <pre id="encOut"></pre>
-            </article>
+            <article class="card"><h3>Constraints</h3><pre id="constraintsOut"></pre></article>
+            <article class="card"><h3>Architecture</h3><pre id="archOut"></pre></article>
+            <article class="card"><h3>BOM estimate</h3><pre id="bomOut"></pre></article>
+            <article class="card"><h3>PCB</h3><pre id="pcbOut"></pre></article>
+            <article class="card"><h3>Firmware</h3><pre id="fwOut"></pre></article>
+            <article class="card"><h3>Enclosure</h3><pre id="encOut"></pre></article>
           </div>
-
-          <article class="card full">
-            <h3>Reviews &amp; escalation</h3>
-            <pre id="reviewsOut"></pre>
-          </article>
-
-          <details class="raw">
-            <summary>Full project JSON</summary>
-            <pre id="rawOut"></pre>
-          </details>
+          <article class="card full"><h3>Reviews &amp; escalation</h3><pre id="reviewsOut"></pre></article>
+          <details class="raw"><summary>Full project JSON</summary><pre id="rawOut"></pre></details>
         </div>
       </section>
     </main>
