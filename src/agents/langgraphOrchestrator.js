@@ -1,6 +1,6 @@
 /**
  * LangGraph Orchestrator (v1.3)
- * With Reviewer agents + simple revision loops.
+ * With Reviewer agents + simple revision loops + optional LLM SpecAgent.
  *
  * Pipeline:
  *   Spec → Architecture → Component → Schematic → PCB
@@ -61,8 +61,8 @@ const GraphState = Annotation.Root({
 });
 
 // ---------- Design nodes ----------
-function specNode(state) {
-  const r = runSpecAgent(state.project);
+async function specNode(state) {
+  const r = await runSpecAgent(state.project);
   return {
     project: r.project,
     agentResults: { agent: "SpecAgent", confidence: r.confidence, risk_level: r.risk_level, summary: r.summary },
@@ -124,9 +124,7 @@ function reviewNode(state) {
 
 function shouldRevise(state) {
   if (!state.revisionTarget) return "risk";
-  if ((state.revisionCount || 0) >= MAX_REVISIONS) {
-    return "risk"; // give up revising and continue to risk/escalation
-  }
+  if ((state.revisionCount || 0) >= MAX_REVISIONS) return "risk";
   if (state.revisionTarget === "schematic") return "revise_schematic";
   if (state.revisionTarget === "pcb") return "revise_pcb";
   return "risk";
@@ -218,7 +216,6 @@ function buildGraph(checkpointer = null) {
       risk: "risk"
     })
 
-    // After incrementing, go back to the appropriate design stage
     .addConditionalEdges("inc_revision", (state) => {
       if (state.revisionTarget === "schematic") return "schematic";
       if (state.revisionTarget === "pcb") return "pcb";
