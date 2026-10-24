@@ -1,15 +1,17 @@
 /**
- * LangGraph-based Orchestrator (v1)
+ * LangGraph-based Orchestrator (v1.1) with Checkpointing & Persistence
  *
- * Replaces the simple linear orchestrator with a proper StateGraph.
- * Each agent is a node. After the design agents we run risk aggregation
- * and conditionally escalate to a human.
+ * - Uses LangGraph StateGraph
+ * - Checkpoints graph state with MemorySaver (in-memory, per process)
+ * - Also saves the final Project State to disk as JSON for durability
  *
  * Requires:
  *   npm install @langchain/langgraph @langchain/core
  */
 
-const { StateGraph, END, START, Annotation } = require("@langchain/langgraph");
+const fs = require("fs");
+const path = require("path");
+const { StateGraph, END, START, Annotation, MemorySaver } = require("@langchain/langgraph");
 const { createEmptyProject, addHistory } = require("./state");
 const { runSpecAgent } = require("./specAgent");
 const { runArchitectureAgent } = require("./architectureAgent");
@@ -19,16 +21,39 @@ const { aggregateRisk } = require("./risk");
 const { runHumanEscalationAgent } = require("./humanEscalationAgent");
 
 // ---------------------------------------------------------------
+// Persistence helpers (project JSON on disk)
+// ---------------------------------------------------------------
+const PROJECTS_DIR = path.join(process.cwd(), "data", "projects");
+
+function ensureProjectsDir() {
+  if (!fs.existsSync(PROJECTS_DIR)) {
+    fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+  }
+}
+
+function saveProjectToDisk(project) {
+  ensureProjectsDir();
+  const filePath = path.join(PROJECTS_DIR, `${project.project_id}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(project, null, 2), "utf8");
+  return filePath;
+}
+
+function loadProjectFromDisk(projectId) {
+  const filePath = path.join(PROJECTS_DIR, `${projectId}.json`);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Project not found on disk: ${projectId}`);
+  }
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+// ---------------------------------------------------------------
 // Graph State
 // ---------------------------------------------------------------
 const GraphState = Annotation.Root({
-  // The full CircuitFlow project (digital twin)
   project: Annotation({
     reducer: (current, update) => update ?? current,
     default: () => null
   }),
-
-  // Results from each agent so far
   agentResults: Annotation({
     reducer: (current, update) => {
       if (!update) return current || [];
@@ -37,14 +62,10 @@ const GraphState = Annotation.Root({
     },
     default: () => []
   }),
-
-  // Aggregation result
   aggregation: Annotation({
     reducer: (current, update) => update ?? current,
     default: () => null
   }),
-
-  // Simple log messages for the CLI
   logs: Annotation({
     reducer: (current, update) => [...(current || []), ...(Array.isArray(update) ? update : [update])],
     default: () => []
@@ -54,7 +75,6 @@ const GraphState = Annotation.Root({
 // ---------------------------------------------------------------
 // Nodes
 // ---------------------------------------------------------------
-
 function specNode(state) {
   const result = runSpecAgent(state.project);
   return {
@@ -144,22 +164,25 @@ function finishNode(state) {
     });
   }
 
-  addHistory(project, "Orchestrator", "pipeline_complete_langgraph_v1", {
+  addHistory(project, "Orchestrator", "pipeline_complete_langgraph_v1.1", {
     agents_run: (state.agentResults || []).map(r => r.agent),
     overall_confidence: state.aggregation?.overall_confidence,
     overall_risk: state.aggregation?.overall_risk,
     needs_human: state.aggregation?.needs_human
   });
 
+  // Persist final project state to disk
+  const savedPath = saveProjectToDisk(project);
+
   return {
     project,
-    logs: [`Pipeline finished. Final status: ${project.status}`]
+    logs: [
+      `Pipeline finished. Final status: ${project.status}`,
+      `Project state saved to: ${savedPath}`
+    ]
   };
 }
 
-// ---------------------------------------------------------------
-// Conditional edge: after risk → escalate or finish
-// ---------------------------------------------------------------
 function shouldEscalate(state) {
   if (state.aggregation && state.aggregation.needs_human) {
     return "escalate";
@@ -168,9 +191,9 @@ function shouldEscalate(state) {
 }
 
 // ---------------------------------------------------------------
-// Build the graph
+// Build the graph with checkpointer
 // ---------------------------------------------------------------
-function buildGraph() {
+function buildGraph(checkpointer = null) {
   const graph = new StateGraph(GraphState)
     .addNode("spec", specNode)
     .addNode("architecture", architectureNode)
@@ -192,43 +215,79 @@ function buildGraph() {
     .addEdge("escalate", "finish")
     .addEdge("finish", END);
 
+  // Compile with optional checkpointer
+  if (checkpointer) {
+    return graph.compile({ checkpointer });
+  }
   return graph.compile();
 }
 
 // ---------------------------------------------------------------
-// Public API (same shape as the old orchestrator)
+// Public API
 // ---------------------------------------------------------------
-async function runPipeline(userPrompt) {
-  console.log("\n=== CircuitFlow LangGraph Orchestrator (v1) ===");
-  console.log(`User prompt: "${userPrompt}"\n`);
+
+/**
+ * Run a new pipeline with checkpointing enabled.
+ * thread_id is used by the checkpointer so the run can be resumed later
+ * (within the same process when using MemorySaver).
+ */
+async function runPipeline(userPrompt, options = {}) {
+  const threadId = options.threadId || `thread_${Date.now().toString(36)}`;
+
+  console.log("\n=== CircuitFlow LangGraph Orchestrator (v1.1) ===");
+  console.log(`User prompt: "${userPrompt}"`);
+  console.log(`Thread ID:   ${threadId}\n`);
 
   const project = createEmptyProject(userPrompt);
-  console.log(`Project ID: ${project.project_id}`);
+  console.log(`Project ID:  ${project.project_id}`);
 
-  const app = buildGraph();
+  // In-memory checkpointer (survives for the lifetime of the process)
+  const checkpointer = new MemorySaver();
+  const app = buildGraph(checkpointer);
 
-  const finalState = await app.invoke({
-    project,
-    agentResults: [],
-    aggregation: null,
-    logs: []
-  });
+  const config = {
+    configurable: {
+      thread_id: threadId
+    }
+  };
+
+  const finalState = await app.invoke(
+    {
+      project,
+      agentResults: [],
+      aggregation: null,
+      logs: []
+    },
+    config
+  );
 
   // Print collected logs
   console.log("\n--- Agent Log ---");
   (finalState.logs || []).forEach(line => console.log(line));
 
-  console.log("\n=== Pipeline finished (LangGraph v1) ===");
+  console.log("\n=== Pipeline finished (LangGraph v1.1) ===");
   console.log(`Final status: ${finalState.project.status}`);
   console.log(`History entries: ${finalState.project.history.length}`);
   if (finalState.project.escalation) {
     console.log(`Escalation status: ${finalState.project.escalation.status}`);
   }
 
+  // Attach thread id for reference
+  finalState.project._thread_id = threadId;
+
   return finalState.project;
+}
+
+/**
+ * Load a previously saved project from disk.
+ */
+function loadProject(projectId) {
+  return loadProjectFromDisk(projectId);
 }
 
 module.exports = {
   runPipeline,
-  buildGraph
+  buildGraph,
+  loadProject,
+  saveProjectToDisk
 };

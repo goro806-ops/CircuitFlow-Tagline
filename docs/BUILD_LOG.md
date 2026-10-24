@@ -1,80 +1,70 @@
 # CircuitFlow Build Log
 
-## 2026-10-24 – Multi-agent foundation started
+## 2026-10-24 – Multi-agent foundation
 
-- Shared Project State (`state.js`)
-- SpecAgent, ArchitectureAgent
-- Simple linear Orchestrator + CLI
-
----
-
-## 2026-10-24 – ComponentAgent + SchematicAgent
-
-- First-pass BOM generation
-- First-pass schematic / netlist generation
-- Confidence/risk aggregation
-- Human escalation path
-
-Pipeline became:
-```
-Spec → Architecture → Component → Schematic → Risk → (Escalate | Finish)
-```
+- Shared Project State
+- SpecAgent, ArchitectureAgent, ComponentAgent, SchematicAgent
+- Confidence/risk aggregation + Human Escalation
+- Classic linear orchestrator
 
 ---
 
-## 2026-10-24 – LangGraph Migration (v1)
+## 2026-10-24 – LangGraph migration (v1)
 
-### What changed
+- Real StateGraph with nodes and conditional edges
+- Pipeline: Spec → Architecture → Component → Schematic → Risk → (Escalate | Finish)
 
-- New file: `src/agents/langgraphOrchestrator.js`
-  - Real **LangGraph StateGraph**
-  - Each agent is a proper graph node
-  - Conditional edge after risk aggregation:
-    - `needs_human === true` → HumanEscalationAgent
-    - otherwise → finish
-  - Shared graph state holds the full Project + agentResults + aggregation + logs
+---
 
-- `src/agents/run.js` updated
-  - Uses LangGraph orchestrator by default
-  - Falls back to classic orchestrator if LangGraph packages are missing
-  - `USE_CLASSIC=1` forces the old linear orchestrator
+## 2026-10-24 – Checkpointing & Persistence (v1.1)
 
-- `package.json` updated with:
-  - `@langchain/langgraph`
-  - `@langchain/core`
+### What was added
+
+1. **LangGraph Checkpointer (MemorySaver)**
+   - Graph state is checkpointed under a `thread_id`
+   - Allows inspection and (within the same process) resumption of a run
+   - Foundation for future human-in-the-loop interrupts and time-travel
+
+2. **Project State persistence to disk**
+   - Final project is saved as JSON under `data/projects/<project_id>.json`
+   - Survives process restarts
+   - Can be loaded later with:
+     ```bash
+     node src/agents/run.js --load proj_xxxxx
+     ```
+
+3. **Updated CLI**
+   - Shows `thread_id` and save path
+   - Supports `--load <project_id>`
 
 ### How to run
 
 ```bash
-# Install the new dependencies first
 npm install
-
-# Run with LangGraph (default)
 npm run agents:example
-
-# Or with a custom prompt
-node src/agents/run.js "Your idea here"
-
-# Force classic orchestrator
-npm run agents:classic
 ```
 
-### Graph structure (v1)
+After a run you will see something like:
+```
+Project state saved to: data/projects/proj_xxxx.json
+```
 
+Load it later:
+```bash
+node src/agents/run.js --load proj_xxxx
 ```
-START
-  → spec
-  → architecture
-  → component
-  → schematic
-  → risk
-       ├─ (needs human) → escalate → finish → END
-       └─ (ok)          → finish → END
-```
+
+### Notes on persistence levels
+
+| Layer                    | Scope                         | Survives process restart? |
+|--------------------------|-------------------------------|---------------------------|
+| MemorySaver (checkpointer) | Graph state for one thread   | No (in-memory only)      |
+| `data/projects/*.json`   | Full Project State            | Yes                      |
+
+For production we can later swap MemorySaver for SqliteSaver or PostgresSaver.
 
 ### Next planned steps
-1. Add checkpointing / persistence (so long-running designs can pause & resume)
-2. Introduce real LLM calls inside SpecAgent and ComponentAgent
-3. Add PCBLayoutAgent
-4. Add revision loops (Reviewer agents that can send work back)
-5. Expose the graph via an API endpoint
+1. Start replacing rule-based logic with real LLM calls
+2. Add PCBLayoutAgent
+3. Add revision loops (Reviewer agents)
+4. Optional: switch to SqliteSaver for durable graph checkpoints
