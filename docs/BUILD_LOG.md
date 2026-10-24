@@ -8,51 +8,72 @@
   Shared Project State factory + helpers for history and reviews.
 
 - `src/agents/specAgent.js`  
-  First real agent. Parses natural language into structured constraints (cost, form factor, power, wireless, sensors, MCU preference). Still rule-based; ready to be upgraded to LLM later.
+  First real agent. Parses natural language into structured constraints.
 
 - `src/agents/architectureAgent.js`  
-  Proposes a high-level block diagram / architecture from the parsed constraints.
+  Proposes a high-level system architecture.
 
 - `src/agents/orchestrator.js`  
-  Simple linear orchestrator that runs the current agent pipeline.
+  Simple linear orchestrator.
 
 - `src/agents/run.js`  
-  CLI entry point to test the pipeline.
-
-### How to run
-
-```bash
-node src/agents/run.js "Bluetooth Low Energy wearable tracker with 6-axis IMU, battery powered, under $15 BOM"
-```
-
-or
-
-```bash
-npm run agents:example
-```
+  CLI entry point.
 
 ---
 
 ## 2026-10-24 – ComponentAgent added
 
+- `src/agents/componentAgent.js`  
+  Builds a first-pass BOM from architecture + small internal knowledge base.  
+  Estimates cost range and checks against user target.
+
+- Pipeline became: **Spec → Architecture → Component**
+
+---
+
+## 2026-10-24 – Confidence / Risk + Human Escalation
+
 ### What was added
 
-- `src/agents/componentAgent.js`  
-  Selects concrete parts from a small internal knowledge base and builds a first-pass BOM.  
-  Includes MCU, sensors, power management, and a passives budget.  
-  Calculates estimated total cost range and checks against the user’s target cost.
+- `src/agents/risk.js`  
+  Aggregates confidence scores and risk levels from all agents.  
+  Decides whether the project needs human review using simple but clear rules.
 
-- Orchestrator updated to run:  
-  **SpecAgent → ArchitectureAgent → ComponentAgent**
+- `src/agents/humanEscalationAgent.js`  
+  Placeholder Human Escalation agent.  
+  When triggered, it creates a structured briefing containing:
+  - User request
+  - Overall confidence & risk
+  - Reasons for escalation
+  - Key artifacts (constraints, architecture summary, BOM preview)
+  - Results from every agent
+  - Empty fields for the human decision
 
-### Current pipeline output includes
-- Parsed constraints
-- Proposed architecture (block diagram level)
-- First-pass BOM with approximate prices and total cost range
+- Orchestrator (v0.3) now:
+  1. Runs Spec → Architecture → Component
+  2. Aggregates confidence & risk
+  3. Either continues or escalates to human review
+  4. Sets project.status = `needs_human` when escalated
+
+### Current decision rules (can be tuned)
+- Overall confidence < 0.55 → escalate
+- Any agent reports `high` risk → escalate
+- ComponentAgent reports high risk (usually cost target missed) → escalate
+
+### How to test
+
+```bash
+node src/agents/run.js "Bluetooth Low Energy wearable tracker with 6-axis IMU, battery powered, under $15 BOM"
+```
+
+Try also a harder target to force escalation:
+
+```bash
+node src/agents/run.js "Bluetooth Low Energy wearable tracker with 6-axis IMU, battery powered, under $6 BOM"
+```
 
 ### Next planned steps
-1. Add basic confidence / risk aggregation and a placeholder human-escalation path
-2. Add SchematicAgent (even if still very simple)
-3. Move the orchestrator to LangGraph for real control flow, branching, and revision loops
-4. Replace rule-based logic with LLM + tool calling (starting with SpecAgent and ComponentAgent)
-5. Connect live distributor pricing (Octopart / DigiKey / Mouser)
+1. Add a basic SchematicAgent
+2. Move the orchestrator to LangGraph
+3. Start replacing rule-based logic with LLM + tool calling
+4. Connect live distributor pricing
