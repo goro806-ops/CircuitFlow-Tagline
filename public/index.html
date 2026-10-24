@@ -57,7 +57,7 @@
           <span class="icon">🌐</span> 11. Consumer Guide & Localization
         </button>
         <button class="nav-item" data-tab="export">
-          <span class="icon">🚀</span> 12. Launch & Export
+          <span class="icon">🚀</span> 12. Launch, Pricing & Quotes
         </button>
       </nav>
 
@@ -354,7 +354,7 @@
           </div>
         </section>
 
-        <!-- View 12: Export -->
+        <!-- View 12: Export, Pricing & Turnkey Quotes -->
         <section id="view-export" class="tab-view">
           <div class="card text-center">
             <div class="export-hero">
@@ -364,6 +364,35 @@
               <button id="btn-download-zip" class="btn btn-accent btn-large margin-top">
                 <span>📥 Download Complete Production Package (.ZIP)</span>
               </button>
+            </div>
+          </div>
+
+          <!-- Business Model & Subscription Tiers -->
+          <div class="card margin-top">
+            <h3>💳 Select Subscription Tier & Turnkey Sourcing Margin</h3>
+            <p class="subtitle">CircuitFlow SaaS Subscription Tiers (Section 8 of Specification)</p>
+
+            <div class="form-row margin-top">
+              <div class="form-group">
+                <label>Active SaaS Tier:</label>
+                <select id="select-user-tier">
+                  <option value="developer" selected>Developer Tier ($0/mo - $49/export download - 15% fulfillment margin)</option>
+                  <option value="pro">Pro Engineer Tier ($199/mo - 5 free exports/mo - 10% fulfillment margin)</option>
+                  <option value="enterprise">Enterprise Team Tier ($999/mo - Unlimited exports - 5% fulfillment margin & HITL Review)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Production Volume Run:</label>
+                <input type="number" id="input-turnkey-qty" value="100" step="50" min="10" max="50000">
+              </div>
+            </div>
+
+            <button id="btn-calc-turnkey" class="btn btn-primary margin-top">
+              <span>📊 Calculate Instant Turnkey Manufacturing Quote</span>
+            </button>
+
+            <div id="turnkey-quote-output" class="details-list margin-top">
+              <div class="text-muted">Click "Calculate Instant Turnkey Manufacturing Quote" to view PCB fab, PCBA assembly, component sourcing, and CircuitFlow fulfillment margin breakdown.</div>
             </div>
           </div>
         </section>

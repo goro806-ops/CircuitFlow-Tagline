@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     render: { title: '9. 3D Studio Render & 360 Disassembly View', subtitle: '360° orbital rotation & exploded disassembly view.' },
     testfixture: { title: '10. Factory Bed-of-Nails Test Jig', subtitle: 'Automated pogo-pin test point map & factory QA fixture CAD.' },
     userguide: { title: '11. Localized Consumer User Guide & Safety Manual', subtitle: 'Generate region-specific, multi-language quick start guides, compliance leaflets, and packaging inserts.' },
-    export: { title: '12. Production Package Launch', subtitle: 'Download turn-key production release package zip archive.' }
+    export: { title: '12. Production Package Launch, SaaS Tiers & Turnkey Quotes', subtitle: 'Download production release package zip archive and view turn-key manufacturing fulfillment quotes.' }
   };
 
   navItems.forEach(item => {
@@ -56,6 +56,60 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+
+  // Turnkey Quote Calculation Event
+  const btnCalcTurnkey = document.getElementById('btn-calc-turnkey');
+  if (btnCalcTurnkey) {
+    btnCalcTurnkey.addEventListener('click', async () => {
+      const tierId = document.getElementById('select-user-tier')?.value || 'developer';
+      const quantity = parseInt(document.getElementById('input-turnkey-qty')?.value || '100', 10);
+      const bomUnitCost = projectData.bom?.summary?.unitCostUSD || 12.50;
+
+      try {
+        const res = await fetch('/api/business/turnkey-quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tierId,
+            projectData: { quantity, bomUnitCost }
+          })
+        });
+        const data = await res.json();
+        renderTurnkeyQuote(data.quote);
+      } catch (err) {
+        alert('Failed to calculate turnkey quote: ' + err.message);
+      }
+    });
+  }
+
+  function renderTurnkeyQuote(quote) {
+    const box = document.getElementById('turnkey-quote-output');
+    if (!box || !quote) return;
+
+    box.innerHTML = `
+      <div style="background: rgba(15, 23, 42, 0.8); padding: 16px; border-radius: 8px; border: 1px solid var(--accent-color);">
+        <h4 style="color: var(--accent-color); margin-bottom: 8px;">🏭 Instant Turnkey Manufacturing & Sourcing Quote</h4>
+        <p><strong>Order Quantity:</strong> ${quote.quantity} Units | <strong>Target Turnaround:</strong> ${quote.estimatedTurnaroundDays} Business Days</p>
+
+        <div class="margin-top" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
+          <div>
+            <p>🧩 <strong>BOM Components:</strong> $${quote.costBreakdown.bomComponentsCost.toFixed(2)} USD</p>
+            <p>🖨️ <strong>PCB Fabrication:</strong> $${quote.costBreakdown.pcbFabricationCost.toFixed(2)} USD</p>
+            <p>⚙️ <strong>PCBA Assembly:</strong> $${quote.costBreakdown.pcbaAssemblyCost.toFixed(2)} USD</p>
+          </div>
+          <div>
+            <p>🔧 <strong>Tooling / Stencil NRE:</strong> $${quote.costBreakdown.nreToolingFee.toFixed(2)} USD</p>
+            <p>💼 <strong>CircuitFlow Sourcing Margin (${quote.costBreakdown.marginPercentage}):</strong> $${quote.costBreakdown.circuitflowFulfillmentMargin.toFixed(2)} USD</p>
+          </div>
+        </div>
+
+        <div class="margin-top" style="padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 6px; border: 1px solid #10b981; font-size: 15px;">
+          <strong>Total Turnkey Production Cost:</strong> <span style="color: #10b981; font-weight: bold;">$${quote.totalTurnkeyCost.toFixed(2)} USD</span>
+          (<span style="color: #38bdf8;">$${quote.unitTurnkeyCost.toFixed(2)} USD / unit</span>)
+        </div>
+      </div>
+    `;
+  }
 
   // Prompt Presets
   const promptInput = document.getElementById('prompt-input');
