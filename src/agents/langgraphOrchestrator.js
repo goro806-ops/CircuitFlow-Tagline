@@ -1,8 +1,11 @@
 /**
- * LangGraph-based Orchestrator (v1.2) with Checkpointing & Persistence
+ * LangGraph Orchestrator (v1.3)
+ * With Reviewer agents + simple revision loops.
  *
  * Pipeline:
- *   Spec → Architecture → Component → Schematic → PCBLayout → Risk → (Escalate | Finish)
+ *   Spec → Architecture → Component → Schematic → PCB
+ *        → Reviewers → (revise Schematic/PCB if needed, max 2 times)
+ *        → Risk → (Escalate | Finish)
  */
 
 const fs = require("fs");
@@ -14,15 +17,15 @@ const { runArchitectureAgent } = require("./architectureAgent");
 const { runComponentAgent } = require("./componentAgent");
 const { runSchematicAgent } = require("./schematicAgent");
 const { runPCBLayoutAgent } = require("./pcbLayoutAgent");
+const { runReviewers } = require("./reviewers");
 const { aggregateRisk } = require("./risk");
 const { runHumanEscalationAgent } = require("./humanEscalationAgent");
 
 const PROJECTS_DIR = path.join(process.cwd(), "data", "projects");
+const MAX_REVISIONS = 2;
 
 function ensureProjectsDir() {
-  if (!fs.existsSync(PROJECTS_DIR)) {
-    fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-  }
+  if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 }
 
 function saveProjectToDisk(project) {
@@ -34,97 +37,132 @@ function saveProjectToDisk(project) {
 
 function loadProjectFromDisk(projectId) {
   const filePath = path.join(PROJECTS_DIR, `${projectId}.json`);
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Project not found on disk: ${projectId}`);
-  }
+  if (!fs.existsSync(filePath)) throw new Error(`Project not found: ${projectId}`);
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
 const GraphState = Annotation.Root({
-  project: Annotation({
-    reducer: (current, update) => update ?? current,
-    default: () => null
-  }),
+  project: Annotation({ reducer: (c, u) => u ?? c, default: () => null }),
   agentResults: Annotation({
-    reducer: (current, update) => {
-      if (!update) return current || [];
-      if (Array.isArray(update)) return [...(current || []), ...update];
-      return [...(current || []), update];
+    reducer: (c, u) => {
+      if (!u) return c || [];
+      if (Array.isArray(u)) return [...(c || []), ...u];
+      return [...(c || []), u];
     },
     default: () => []
   }),
-  aggregation: Annotation({
-    reducer: (current, update) => update ?? current,
-    default: () => null
-  }),
+  aggregation: Annotation({ reducer: (c, u) => u ?? c, default: () => null }),
+  revisionCount: Annotation({ reducer: (c, u) => (u === undefined ? c : u), default: () => 0 }),
+  revisionTarget: Annotation({ reducer: (c, u) => u ?? c, default: () => null }),
   logs: Annotation({
-    reducer: (current, update) => [...(current || []), ...(Array.isArray(update) ? update : [update])],
+    reducer: (c, u) => [...(c || []), ...(Array.isArray(u) ? u : [u])],
     default: () => []
   })
 });
 
+// ---------- Design nodes ----------
 function specNode(state) {
-  const result = runSpecAgent(state.project);
+  const r = runSpecAgent(state.project);
   return {
-    project: result.project,
-    agentResults: { agent: "SpecAgent", confidence: result.confidence, risk_level: result.risk_level, summary: result.summary },
-    logs: [`SpecAgent → confidence ${result.confidence.toFixed(2)} | ${result.summary}`]
+    project: r.project,
+    agentResults: { agent: "SpecAgent", confidence: r.confidence, risk_level: r.risk_level, summary: r.summary },
+    logs: [`SpecAgent → ${r.confidence.toFixed(2)} | ${r.summary}`]
   };
 }
 
 function architectureNode(state) {
-  const result = runArchitectureAgent(state.project);
+  const r = runArchitectureAgent(state.project);
   return {
-    project: result.project,
-    agentResults: { agent: "ArchitectureAgent", confidence: result.confidence, risk_level: result.risk_level, summary: result.summary },
-    logs: [`ArchitectureAgent → confidence ${result.confidence.toFixed(2)} | ${result.summary}`]
+    project: r.project,
+    agentResults: { agent: "ArchitectureAgent", confidence: r.confidence, risk_level: r.risk_level, summary: r.summary },
+    logs: [`ArchitectureAgent → ${r.confidence.toFixed(2)} | ${r.summary}`]
   };
 }
 
 function componentNode(state) {
-  const result = runComponentAgent(state.project);
+  const r = runComponentAgent(state.project);
   return {
-    project: result.project,
-    agentResults: { agent: "ComponentAgent", confidence: result.confidence, risk_level: result.risk_level, summary: result.summary },
-    logs: [`ComponentAgent → confidence ${result.confidence.toFixed(2)} | ${result.summary}`]
+    project: r.project,
+    agentResults: { agent: "ComponentAgent", confidence: r.confidence, risk_level: r.risk_level, summary: r.summary },
+    logs: [`ComponentAgent → ${r.confidence.toFixed(2)} | ${r.summary}`]
   };
 }
 
 function schematicNode(state) {
-  const result = runSchematicAgent(state.project);
+  const r = runSchematicAgent(state.project);
   return {
-    project: result.project,
-    agentResults: { agent: "SchematicAgent", confidence: result.confidence, risk_level: result.risk_level, summary: result.summary },
-    logs: [`SchematicAgent → confidence ${result.confidence.toFixed(2)} | ${result.summary}`]
+    project: r.project,
+    agentResults: { agent: "SchematicAgent", confidence: r.confidence, risk_level: r.risk_level, summary: r.summary },
+    logs: [`SchematicAgent → ${r.confidence.toFixed(2)} | ${r.summary}`]
   };
 }
 
 function pcbNode(state) {
-  const result = runPCBLayoutAgent(state.project);
+  const r = runPCBLayoutAgent(state.project);
   return {
-    project: result.project,
-    agentResults: { agent: "PCBLayoutAgent", confidence: result.confidence, risk_level: result.risk_level, summary: result.summary },
-    logs: [`PCBLayoutAgent → confidence ${result.confidence.toFixed(2)} | ${result.summary}`]
+    project: r.project,
+    agentResults: { agent: "PCBLayoutAgent", confidence: r.confidence, risk_level: r.risk_level, summary: r.summary },
+    logs: [`PCBLayoutAgent → ${r.confidence.toFixed(2)} | ${r.summary}`]
   };
 }
 
+// ---------- Review + revision ----------
+function reviewNode(state) {
+  const r = runReviewers(state.project);
+  return {
+    project: r.project,
+    revisionTarget: r.needsRevision ? r.revisionTarget : null,
+    agentResults: {
+      agent: "Reviewers",
+      confidence: r.confidence,
+      risk_level: r.risk_level,
+      summary: r.summary
+    },
+    logs: [`Reviewers → ${r.summary}`]
+  };
+}
+
+function shouldRevise(state) {
+  if (!state.revisionTarget) return "risk";
+  if ((state.revisionCount || 0) >= MAX_REVISIONS) {
+    return "risk"; // give up revising and continue to risk/escalation
+  }
+  if (state.revisionTarget === "schematic") return "revise_schematic";
+  if (state.revisionTarget === "pcb") return "revise_pcb";
+  return "risk";
+}
+
+function incrementRevision(state) {
+  const count = (state.revisionCount || 0) + 1;
+  addHistory(state.project, "Orchestrator", "revision_loop", {
+    count,
+    target: state.revisionTarget
+  });
+  return {
+    revisionCount: count,
+    logs: [`Revision loop #${count} (target: ${state.revisionTarget})`]
+  };
+}
+
+// ---------- Risk & finish ----------
 function riskNode(state) {
   const aggregation = aggregateRisk(state.agentResults || []);
   return {
     aggregation,
     logs: [
-      `Risk aggregation → confidence ${aggregation.overall_confidence} | risk ${aggregation.overall_risk} | needs_human: ${aggregation.needs_human}`,
+      `Risk → conf ${aggregation.overall_confidence} | risk ${aggregation.overall_risk} | human: ${aggregation.needs_human}`,
       ...aggregation.reasons.map(r => `  - ${r}`)
     ]
   };
 }
 
+function shouldEscalate(state) {
+  return state.aggregation?.needs_human ? "escalate" : "finish";
+}
+
 function escalationNode(state) {
-  const result = runHumanEscalationAgent(state.project, state.aggregation, state.agentResults || []);
-  return {
-    project: result.project,
-    logs: [result.message]
-  };
+  const r = runHumanEscalationAgent(state.project, state.aggregation, state.agentResults || []);
+  return { project: r.project, logs: [r.message] };
 }
 
 function finishNode(state) {
@@ -133,33 +171,27 @@ function finishNode(state) {
     project.status = "in_progress";
     addHistory(project, "Orchestrator", "auto_approved_for_now", {
       overall_confidence: state.aggregation?.overall_confidence,
-      overall_risk: state.aggregation?.overall_risk
+      overall_risk: state.aggregation?.overall_risk,
+      revisions: state.revisionCount || 0
     });
   }
 
-  addHistory(project, "Orchestrator", "pipeline_complete_langgraph_v1.2", {
+  addHistory(project, "Orchestrator", "pipeline_complete_langgraph_v1.3", {
     agents_run: (state.agentResults || []).map(r => r.agent),
     overall_confidence: state.aggregation?.overall_confidence,
     overall_risk: state.aggregation?.overall_risk,
-    needs_human: state.aggregation?.needs_human
+    needs_human: state.aggregation?.needs_human,
+    revision_count: state.revisionCount || 0
   });
 
   const savedPath = saveProjectToDisk(project);
-
   return {
     project,
-    logs: [
-      `Pipeline finished. Final status: ${project.status}`,
-      `Project state saved to: ${savedPath}`
-    ]
+    logs: [`Pipeline finished. Status: ${project.status}`, `Saved: ${savedPath}`]
   };
 }
 
-function shouldEscalate(state) {
-  if (state.aggregation && state.aggregation.needs_human) return "escalate";
-  return "finish";
-}
-
+// ---------- Build graph ----------
 function buildGraph(checkpointer = null) {
   const graph = new StateGraph(GraphState)
     .addNode("spec", specNode)
@@ -167,6 +199,8 @@ function buildGraph(checkpointer = null) {
     .addNode("component", componentNode)
     .addNode("schematic", schematicNode)
     .addNode("pcb", pcbNode)
+    .addNode("review", reviewNode)
+    .addNode("inc_revision", incrementRevision)
     .addNode("risk", riskNode)
     .addNode("escalate", escalationNode)
     .addNode("finish", finishNode)
@@ -176,7 +210,25 @@ function buildGraph(checkpointer = null) {
     .addEdge("architecture", "component")
     .addEdge("component", "schematic")
     .addEdge("schematic", "pcb")
-    .addEdge("pcb", "risk")
+    .addEdge("pcb", "review")
+
+    .addConditionalEdges("review", shouldRevise, {
+      revise_schematic: "inc_revision",
+      revise_pcb: "inc_revision",
+      risk: "risk"
+    })
+
+    // After incrementing, go back to the appropriate design stage
+    .addConditionalEdges("inc_revision", (state) => {
+      if (state.revisionTarget === "schematic") return "schematic";
+      if (state.revisionTarget === "pcb") return "pcb";
+      return "risk";
+    }, {
+      schematic: "schematic",
+      pcb: "pcb",
+      risk: "risk"
+    })
+
     .addConditionalEdges("risk", shouldEscalate, {
       escalate: "escalate",
       finish: "finish"
@@ -191,7 +243,7 @@ function buildGraph(checkpointer = null) {
 async function runPipeline(userPrompt, options = {}) {
   const threadId = options.threadId || `thread_${Date.now().toString(36)}`;
 
-  console.log("\n=== CircuitFlow LangGraph Orchestrator (v1.2) ===");
+  console.log("\n=== CircuitFlow LangGraph Orchestrator (v1.3) ===");
   console.log(`User prompt: "${userPrompt}"`);
   console.log(`Thread ID:   ${threadId}\n`);
 
@@ -201,21 +253,27 @@ async function runPipeline(userPrompt, options = {}) {
   const checkpointer = new MemorySaver();
   const app = buildGraph(checkpointer);
 
-  const config = { configurable: { thread_id: threadId } };
-
   const finalState = await app.invoke(
-    { project, agentResults: [], aggregation: null, logs: [] },
-    config
+    {
+      project,
+      agentResults: [],
+      aggregation: null,
+      revisionCount: 0,
+      revisionTarget: null,
+      logs: []
+    },
+    { configurable: { thread_id: threadId } }
   );
 
   console.log("\n--- Agent Log ---");
   (finalState.logs || []).forEach(line => console.log(line));
 
-  console.log("\n=== Pipeline finished (LangGraph v1.2) ===");
+  console.log("\n=== Pipeline finished (LangGraph v1.3) ===");
   console.log(`Final status: ${finalState.project.status}`);
-  console.log(`History entries: ${finalState.project.history.length}`);
+  console.log(`Revisions:    ${finalState.revisionCount || 0}`);
+  console.log(`History:      ${finalState.project.history.length} entries`);
   if (finalState.project.escalation) {
-    console.log(`Escalation status: ${finalState.project.escalation.status}`);
+    console.log(`Escalation:   ${finalState.project.escalation.status}`);
   }
 
   finalState.project._thread_id = threadId;
@@ -226,9 +284,4 @@ function loadProject(projectId) {
   return loadProjectFromDisk(projectId);
 }
 
-module.exports = {
-  runPipeline,
-  buildGraph,
-  loadProject,
-  saveProjectToDisk
-};
+module.exports = { runPipeline, buildGraph, loadProject, saveProjectToDisk };
