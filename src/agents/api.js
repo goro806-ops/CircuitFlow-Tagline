@@ -1,11 +1,19 @@
 /**
- * Multi-agent HTTP API – /api/agents  (v1.8)
+ * Multi-agent HTTP API – /api/agents  (v1.9)
  */
 
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const { optionalAuth, registerUser, loginUser } = require("./auth");
+const {
+  optionalAuth,
+  registerUser,
+  loginUser,
+  getGoogleAuthUrl,
+  loginWithGoogleCode,
+  isGoogleOAuthConfigured,
+  getGoogleRedirectUri
+} = require("./auth");
 const { generateEnclosureStl } = require("./exportStl");
 const { generateKicadProject } = require("./exportKicad");
 
@@ -67,7 +75,11 @@ function assertOwner(req, project) {
   }
 }
 
-/** Register – supports name only OR email+password */
+function authHeaders(req) {
+  const h = { "Content-Type": "application/json" };
+  return h;
+}
+
 router.post("/auth/register", (req, res) => {
   try {
     const { name, email, password } = req.body || {};
@@ -77,7 +89,7 @@ router.post("/auth/register", (req, res) => {
       user,
       usage: {
         api_key: "Authorization: Bearer <api_key>",
-        login: email && password ? "POST /api/agents/auth/login with email+password" : null
+        login: email && password ? "POST /api/agents/auth/login" : null
       }
     });
   } catch (err) {
@@ -85,7 +97,6 @@ router.post("/auth/register", (req, res) => {
   }
 });
 
-/** Login with email + password → session token */
 router.post("/auth/login", (req, res) => {
   try {
     const { email, password } = req.body || {};
@@ -93,14 +104,50 @@ router.post("/auth/login", (req, res) => {
       return res.status(400).json({ success: false, error: "email and password required" });
     }
     const result = loginUser(email, password);
-    res.json({
-      success: true,
-      ...result,
-      usage: "Authorization: Bearer <token>"
-    });
+    res.json({ success: true, ...result, usage: "Authorization: Bearer <token>" });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }
+});
+
+/** Start Google OAuth – redirects browser to Google */
+router.get("/auth/google", (req, res) => {
+  try {
+    const url = getGoogleAuthUrl(req);
+    res.redirect(url);
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+/** Google OAuth callback – exchanges code, redirects to UI with token */
+router.get("/auth/google/callback", async (req, res) => {
+  try {
+    const { code, error } = req.query;
+    if (error) {
+      return res.redirect(`/agents.html?auth_error=${encodeURIComponent(String(error))}`);
+    }
+    const result = await loginWithGoogleCode(code, req);
+    // Pass token to frontend via URL hash (not sent to server logs as referrer as easily)
+    const q = new URLSearchParams({
+      token: result.token,
+      name: result.user.name || "",
+      email: result.user.email || ""
+    });
+    res.redirect(`/agents.html?google_auth=1&${q.toString()}`);
+  } catch (err) {
+    console.error("[auth/google/callback]", err);
+    res.redirect(`/agents.html?auth_error=${encodeURIComponent(err.message || "oauth_failed")}`);
+  }
+});
+
+router.get("/auth/google/status", (req, res) => {
+  res.json({
+    success: true,
+    configured: isGoogleOAuthConfigured(),
+    redirect_uri_hint: getGoogleRedirectUri(req),
+    start_url: "/api/agents/auth/google"
+  });
 });
 
 router.post("/run", async (req, res) => {
@@ -187,10 +234,7 @@ router.get("/projects/:id/export", (req, res) => {
     const { project } = loadProjectFile(req.params.id);
     assertOwner(req, project);
     res.setHeader("Content-Type", "application/json");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${project.project_id}.json"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${project.project_id}.json"`);
     res.send(JSON.stringify(project, null, 2));
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
@@ -202,59 +246,42 @@ router.get("/projects/:id/enclosure.scad", (req, res) => {
     const { project } = loadProjectFile(req.params.id);
     assertOwner(req, project);
     const scad = project.enclosure?.export?.openscad;
-    if (!scad) {
-      return res.status(404).json({ success: false, error: "No OpenSCAD export on this project" });
-    }
+    if (!scad) return res.status(404).json({ success: false, error: "No OpenSCAD export" });
     res.setHeader("Content-Type", "text/plain");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${project.project_id}_enclosure.scad"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${project.project_id}_enclosure.scad"`);
     res.send(scad);
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
-/** Server-generated ASCII STL */
 router.get("/projects/:id/enclosure.stl", (req, res) => {
   try {
     const { project } = loadProjectFile(req.params.id);
     assertOwner(req, project);
-    if (!project.enclosure) {
-      return res.status(404).json({ success: false, error: "No enclosure on this project" });
-    }
+    if (!project.enclosure) return res.status(404).json({ success: false, error: "No enclosure" });
     const stl = generateEnclosureStl(project.enclosure);
     res.setHeader("Content-Type", "application/sla");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${project.project_id}_enclosure.stl"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${project.project_id}_enclosure.stl"`);
     res.send(stl);
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
-/** KiCad project files (JSON bundle with .kicad_sch / .kicad_pcb content) */
 router.get("/projects/:id/kicad", (req, res) => {
   try {
     const { project } = loadProjectFile(req.params.id);
     assertOwner(req, project);
     if (!project.schematic || !project.pcb) {
-      return res.status(404).json({
-        success: false,
-        error: "Project needs schematic and PCB to export KiCad"
-      });
+      return res.status(404).json({ success: false, error: "Need schematic and PCB" });
     }
-    const bundle = generateKicadProject(project);
-    res.json({ success: true, kicad: bundle });
+    res.json({ success: true, kicad: generateKicadProject(project) });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
-/** Download individual KiCad schematic */
 router.get("/projects/:id/kicad.sch", (req, res) => {
   try {
     const { project } = loadProjectFile(req.params.id);
@@ -288,37 +315,25 @@ router.post("/projects/:id/review", (req, res) => {
     const { decision, comments, reviewed_by } = req.body || {};
     const allowed = ["approved", "changes_requested", "rejected"];
     if (!allowed.includes(decision)) {
-      return res.status(400).json({
-        success: false,
-        error: `decision must be one of: ${allowed.join(", ")}`
-      });
+      return res.status(400).json({ success: false, error: `decision must be one of: ${allowed.join(", ")}` });
     }
-
     const { project } = loadProjectFile(req.params.id);
-
     if (!project.escalation) {
       project.escalation = {
         project_id: project.project_id,
         status: "manual_review",
-        summary: { reasons_for_escalation: ["Manual review submitted via API"] }
+        summary: { reasons_for_escalation: ["Manual review via API"] }
       };
     }
-
     project.escalation.human_decision = decision;
     project.escalation.human_comments = comments || null;
     project.escalation.reviewed_by = reviewed_by || (req.user && req.user.name) || "anonymous";
     project.escalation.reviewed_at = new Date().toISOString();
     project.escalation.status =
-      decision === "approved"
-        ? "human_approved"
-        : decision === "rejected"
-          ? "human_rejected"
-          : "human_changes_requested";
-
+      decision === "approved" ? "human_approved" : decision === "rejected" ? "human_rejected" : "human_changes_requested";
     if (decision === "approved") project.status = "approved";
     else if (decision === "rejected") project.status = "failed";
     else project.status = "in_progress";
-
     project.history = project.history || [];
     project.history.push({
       timestamp: new Date().toISOString(),
@@ -326,15 +341,8 @@ router.post("/projects/:id/review", (req, res) => {
       action: "human_decision",
       details: { decision, reviewed_by: project.escalation.reviewed_by }
     });
-
     saveProjectFile(project);
-
-    res.json({
-      success: true,
-      project_id: project.project_id,
-      status: project.status,
-      escalation: project.escalation
-    });
+    res.json({ success: true, project_id: project.project_id, status: project.status, escalation: project.escalation });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }
@@ -345,14 +353,8 @@ router.get("/status", (req, res) => {
   let checkpointer = "unknown";
   let pricingLive = false;
   let liveProviders = [];
-  try {
-    llm = require("./llm").isLLMEnabled();
-  } catch (_) {}
-  try {
-    checkpointer = require("./checkpointer").createCheckpointer().type;
-  } catch (_) {
-    checkpointer = "memory";
-  }
+  try { llm = require("./llm").isLLMEnabled(); } catch (_) {}
+  try { checkpointer = require("./checkpointer").createCheckpointer().type; } catch (_) { checkpointer = "memory"; }
   try {
     const pricing = require("./pricing");
     pricingLive = pricing.isLivePricingEnabled();
@@ -361,36 +363,27 @@ router.get("/status", (req, res) => {
 
   res.json({
     success: true,
-    version: "1.8",
+    version: "1.9",
     foundation: "complete",
     orchestrator: "langgraph",
     llm_enabled: llm,
     pricing: {
       mode: pricingLive ? "live" : "mock",
-      providers: liveProviders,
-      note: "Set DIGIKEY_CLIENT_ID+SECRET, MOUSER_API_KEY, and/or NEXAR_TOKEN / OCTOPART_API_KEY"
+      providers: liveProviders
     },
     auth: {
-      mode: "api_key_or_password",
+      modes: ["api_key", "password", "google_oauth"],
+      google_configured: isGoogleOAuthConfigured(),
+      google_start: "/api/agents/auth/google",
       register: "POST /api/agents/auth/register",
-      login: "POST /api/agents/auth/login",
-      note: "Bearer api_key or session token; email+password supported"
+      login: "POST /api/agents/auth/login"
     },
     exports: ["json", "openscad", "stl", "kicad_sch", "kicad_pcb"],
     checkpointer,
     endpoints: {
-      register: "POST /api/agents/auth/register",
-      login: "POST /api/agents/auth/login",
+      google: "GET /api/agents/auth/google",
+      google_callback: "GET /api/agents/auth/google/callback",
       run: "POST /api/agents/run",
-      projects: "GET /api/agents/projects",
-      project: "GET /api/agents/projects/:id",
-      export: "GET /api/agents/projects/:id/export",
-      enclosure_scad: "GET /api/agents/projects/:id/enclosure.scad",
-      enclosure_stl: "GET /api/agents/projects/:id/enclosure.stl",
-      kicad: "GET /api/agents/projects/:id/kicad",
-      kicad_sch: "GET /api/agents/projects/:id/kicad.sch",
-      kicad_pcb: "GET /api/agents/projects/:id/kicad.pcb",
-      review: "POST /api/agents/projects/:id/review",
       status: "GET /api/agents/status",
       ui: "/agents.html"
     }

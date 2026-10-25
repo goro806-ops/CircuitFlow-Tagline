@@ -8,12 +8,77 @@ const loadingState = $("loadingState");
 const errorState = $("errorState");
 const results = $("results");
 
-function show(el) { el.classList.remove("hidden"); }
-function hide(el) { el.classList.add("hidden"); }
+const TOKEN_KEY = "cf_token";
+const USER_KEY = "cf_user";
+
+function show(el) { if (el) el.classList.remove("hidden"); }
+function hide(el) { if (el) el.classList.add("hidden"); }
+
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY) || "";
+}
+
+function getUser() {
+  try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch { return null; }
+}
+
+function setSession(token, user) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+  updateAuthUI();
+}
+
+function clearSession() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  updateAuthUI();
+}
+
+function authHeaders(extra = {}) {
+  const h = { ...extra };
+  const t = getToken();
+  if (t) h["Authorization"] = `Bearer ${t}`;
+  return h;
+}
+
+function updateAuthUI() {
+  const user = getUser();
+  const chip = $("userChip");
+  const googleBtn = $("googleBtn");
+  const logoutBtn = $("logoutBtn");
+  if (user && getToken()) {
+    if (chip) {
+      chip.textContent = user.name || user.email || "Signed in";
+      show(chip);
+    }
+    if (googleBtn) googleBtn.style.display = "none";
+    if (logoutBtn) show(logoutBtn);
+  } else {
+    if (chip) hide(chip);
+    if (logoutBtn) hide(logoutBtn);
+  }
+}
 
 function setBadge(text, kind) {
   statusBadge.textContent = text;
   statusBadge.className = "badge" + (kind ? " " + kind : "");
+}
+
+/** Handle return from Google OAuth */
+function handleOAuthReturn() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("auth_error")) {
+    alert("Google sign-in failed: " + params.get("auth_error"));
+    window.history.replaceState({}, "", "/agents.html");
+    return;
+  }
+  if (params.get("google_auth") === "1" && params.get("token")) {
+    setSession(params.get("token"), {
+      name: params.get("name") || "",
+      email: params.get("email") || ""
+    });
+    window.history.replaceState({}, "", "/agents.html");
+  }
 }
 
 async function loadStatus() {
@@ -21,8 +86,17 @@ async function loadStatus() {
     const res = await fetch("/api/agents/status");
     const data = await res.json();
     if (data.success) {
-      const llm = data.llm_enabled ? "LLM on" : "rules only";
-      setBadge(`v${data.version || "1.5"} · ${llm} · ${data.checkpointer || "mem"}`, "ok");
+      const llm = data.llm_enabled ? "LLM on" : "rules";
+      setBadge(`v${data.version || "?"} · ${llm}`, "ok");
+      const googleBtn = $("googleBtn");
+      if (googleBtn) {
+        if (data.auth && data.auth.google_configured) {
+          googleBtn.style.display = getToken() ? "none" : "inline-flex";
+        } else {
+          googleBtn.style.display = "none";
+          googleBtn.title = "Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET on server";
+        }
+      }
     } else setBadge("API error", "err");
   } catch {
     setBadge("offline", "err");
@@ -39,7 +113,7 @@ function renderSummary(data) {
   const status = p.status || data.status || "unknown";
   const statusEl = $("resultStatus");
   statusEl.textContent = status;
-  statusEl.className = "badge " + (status === "needs_human" ? "warn" : status === "approved" ? "ok" : "ok");
+  statusEl.className = "badge " + (status === "needs_human" ? "warn" : "ok");
 
   $("constraintsOut").textContent = JSON.stringify(s.constraints || p.user_intent?.parsed_constraints || {}, null, 2);
   $("archOut").textContent = JSON.stringify({
@@ -63,40 +137,36 @@ function renderSummary(data) {
   }) || {}, null, 2);
   $("fwOut").textContent = JSON.stringify({
     modules: s.firmware_modules || p.firmware?.modules?.length,
-    mcu: p.firmware?.board_support?.mcu_family,
-    framework: p.firmware?.board_support?.framework
+    mcu: p.firmware?.board_support?.mcu_family
   }, null, 2);
   $("encOut").textContent = JSON.stringify(s.enclosure || p.enclosure?.outer_mm || {}, null, 2);
   $("reviewsOut").textContent = JSON.stringify({
     review_count: s.reviews ?? p.reviews?.length,
     needs_human: s.needs_human ?? !!p.escalation,
     human_decision: p.escalation?.human_decision,
-    reviews: p.reviews,
-    escalation_reasons: p.escalation?.summary?.reasons_for_escalation
+    reviews: p.reviews
   }, null, 2);
   $("rawOut").textContent = JSON.stringify(p, null, 2);
 
-  // Human review controls
   const hr = $("humanReview");
   if (hr) {
     if (p.status === "needs_human" || (p.escalation && !p.escalation.human_decision)) {
       show(hr);
       hr.dataset.projectId = p.project_id;
-    } else {
-      hide(hr);
-    }
+    } else hide(hr);
   }
 
+  const id = p.project_id;
   const exportLink = $("exportLink");
-  if (exportLink && p.project_id) {
-    exportLink.href = `/api/agents/projects/${p.project_id}/export`;
-    show(exportLink);
+  const stlLink = $("stlLink");
+  const kicadLink = $("kicadLink");
+  if (id) {
+    if (exportLink) { exportLink.href = `/api/agents/projects/${id}/export`; show(exportLink); }
+    if (stlLink) { stlLink.href = `/api/agents/projects/${id}/enclosure.stl`; show(stlLink); }
+    if (kicadLink) { kicadLink.href = `/api/agents/projects/${id}/kicad.sch`; show(kicadLink); }
   }
 
-  hide(emptyState);
-  hide(loadingState);
-  hide(errorState);
-  show(results);
+  hide(emptyState); hide(loadingState); hide(errorState); show(results);
 }
 
 async function runPipeline() {
@@ -109,7 +179,7 @@ async function runPipeline() {
   try {
     const res = await fetch("/api/agents/run", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ prompt })
     });
     const data = await res.json();
@@ -130,16 +200,16 @@ async function submitHumanReview(decision) {
   const id = hr?.dataset?.projectId;
   if (!id) return;
   const comments = $("reviewComments")?.value || "";
-  const reviewed_by = $("reviewBy")?.value || "web-ui";
+  const reviewed_by = $("reviewBy")?.value || getUser()?.name || "web-ui";
   try {
     const res = await fetch(`/api/agents/projects/${id}/review`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ decision, comments, reviewed_by })
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || "Review failed");
-    const loaded = await fetch(`/api/agents/projects/${id}`);
+    const loaded = await fetch(`/api/agents/projects/${id}`, { headers: authHeaders() });
     const body = await loaded.json();
     renderSummary({ success: true, project: body.project, status: body.project.status, project_id: id });
     loadProjects();
@@ -151,14 +221,14 @@ async function submitHumanReview(decision) {
 async function loadProjects() {
   const list = $("projectList");
   try {
-    const res = await fetch("/api/agents/projects");
+    const res = await fetch("/api/agents/projects", { headers: authHeaders() });
     const data = await res.json();
     const projects = data.projects || [];
     if (!projects.length) {
       list.innerHTML = '<li class="empty-msg">No saved projects yet</li>';
       return;
     }
-    list.innerHTML = projects.slice().reverse().map(p => `
+    list.innerHTML = projects.map(p => `
       <li data-id="${p.project_id}">
         <span class="id">${p.project_id}</span>
         <span class="prompt">${(p.prompt || "").replace(/</g, "&lt;")}</span>
@@ -170,7 +240,7 @@ async function loadProjects() {
         const id = li.getAttribute("data-id");
         hide(emptyState); hide(results); hide(errorState); show(loadingState);
         try {
-          const res = await fetch(`/api/agents/projects/${id}`);
+          const res = await fetch(`/api/agents/projects/${id}`, { headers: authHeaders() });
           const data = await res.json();
           if (!data.success) throw new Error(data.error || "Load failed");
           renderSummary({ success: true, project: data.project, status: data.project.status, project_id: id });
@@ -188,6 +258,9 @@ async function loadProjects() {
 
 runBtn.addEventListener("click", runPipeline);
 $("refreshProjects").addEventListener("click", loadProjects);
+const logoutBtn = $("logoutBtn");
+if (logoutBtn) logoutBtn.addEventListener("click", () => { clearSession(); loadProjects(); });
+
 document.querySelectorAll(".chip").forEach(btn => {
   btn.addEventListener("click", () => {
     promptEl.value = btn.getAttribute("data-prompt") || "";
@@ -207,5 +280,7 @@ promptEl.addEventListener("keydown", (e) => {
   });
 });
 
+handleOAuthReturn();
+updateAuthUI();
 loadStatus();
 loadProjects();

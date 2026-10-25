@@ -17,8 +17,10 @@
         </div>
       </div>
       <div class="header-meta">
+        <span id="userChip" class="badge hidden"></span>
+        <a id="googleBtn" class="btn ghost" href="/api/agents/auth/google" style="width:auto;text-decoration:none;display:none;">Sign in with Google</a>
+        <button id="logoutBtn" type="button" class="btn ghost hidden" style="width:auto">Log out</button>
         <span id="statusBadge" class="badge">checking…</span>
-        <a href="/" class="link">Legacy demo</a>
       </div>
     </header>
 
@@ -48,6 +50,8 @@
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
               <a id="exportLink" class="link hidden" href="#">Export JSON</a>
+              <a id="stlLink" class="link hidden" href="#">STL</a>
+              <a id="kicadLink" class="link hidden" href="#">KiCad</a>
               <span id="resultStatus" class="badge"></span>
             </div>
           </div>
