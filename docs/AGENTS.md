@@ -1,24 +1,17 @@
 # CircuitFlow Multi-Agent System
 
-**Status: v1.7**  
-Entry document for the multi-agent pipeline.
+**Status: v1.8**
 
 ---
 
-## What it does
+## Pipeline
 
-1. **SpecAgent** – constraints (optional LLM)
-2. **ArchitectureAgent** – MCU / power / wireless blocks
-3. **ComponentAgent** – BOM + pricing (mock or live DigiKey/Mouser)
-4. **SchematicAgent** – pin-aware netlist
-5. **PCBLayoutAgent** – board size, layers, placements
-6. **FirmwareAgent** – firmware scaffold
-7. **EnclosureAgent** – parametric enclosure + OpenSCAD export
-8. **Reviewers** – Schematic, Layout, PowerThermal, DFM (+ optional LLM)
-9. **Revision loops** – up to 2 automatic rework cycles
-10. **Risk aggregation** → **Human escalation**
-11. **Persistence** + LangGraph checkpoints
-12. **Optional API-key auth** for project ownership
+1. SpecAgent → ArchitectureAgent → ComponentAgent (pricing)
+2. SchematicAgent (pin-aware) → PCBLayoutAgent
+3. FirmwareAgent → EnclosureAgent
+4. Reviewers + revision loops
+5. Risk → Human escalation
+6. Exports: JSON, OpenSCAD, **STL**, **KiCad sch/pcb**
 
 ---
 
@@ -26,47 +19,44 @@ Entry document for the multi-agent pipeline.
 
 ```bash
 npm install
-npm run test:agents
 npm run agents:example
 npm start
 ```
 
-| Surface | URL / command |
-|---------|----------------|
-| Web UI | http://localhost:3000/agents.html |
-| Register user | `POST /api/agents/auth/register` `{ "name": "alice" }` |
-| Run pipeline | `POST /api/agents/run` `{ "prompt": "..." }` |
-| List projects | `GET /api/agents/projects` |
-| Load project | `GET /api/agents/projects/:id` |
-| Enclosure SCAD | `GET /api/agents/projects/:id/enclosure.scad` |
-| Human decision | `POST /api/agents/projects/:id/review` |
-| Export JSON | `GET /api/agents/projects/:id/export` |
-| Status | `GET /api/agents/status` |
-
-### Optional env
+### Auth
 
 ```bash
-export OPENAI_API_KEY=sk-...
+# API key only
+curl -X POST localhost:3000/api/agents/auth/register -H 'Content-Type: application/json' -d '{"name":"alice"}'
+
+# Email + password
+curl -X POST localhost:3000/api/agents/auth/register -H 'Content-Type: application/json' \
+  -d '{"name":"alice","email":"a@example.com","password":"secret12"}'
+
+curl -X POST localhost:3000/api/agents/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"a@example.com","password":"secret12"}'
+# → { token: "tok_..." }
+```
+
+### Exports
+
+```
+GET /api/agents/projects/:id/export          # full JSON
+GET /api/agents/projects/:id/enclosure.scad
+GET /api/agents/projects/:id/enclosure.stl   # server-generated STL
+GET /api/agents/projects/:id/kicad           # bundle
+GET /api/agents/projects/:id/kicad.sch
+GET /api/agents/projects/:id/kicad.pcb
+```
+
+### Live pricing env
+
+```bash
 export DIGIKEY_CLIENT_ID=...
 export DIGIKEY_CLIENT_SECRET=...
 export MOUSER_API_KEY=...
-export CIRCUITFLOW_CHECKPOINT_DB=./data/checkpoints.sqlite
-```
-
----
-
-## Auth (optional)
-
-```bash
-curl -X POST http://localhost:3000/api/agents/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"alice"}'
-# → { api_key: "cf_..." }
-
-curl -X POST http://localhost:3000/api/agents/run \
-  -H "Authorization: Bearer cf_..." \
-  -H "Content-Type: application/json" \
-  -d '{"prompt":"BLE wearable with IMU under $15"}'
+export NEXAR_TOKEN=...   # or OCTOPART_API_KEY
+export OPENAI_API_KEY=...
 ```
 
 ---
@@ -75,31 +65,18 @@ curl -X POST http://localhost:3000/api/agents/run \
 
 | Path | Role |
 |------|------|
-| `src/agents/state.js` | Digital twin |
-| `src/agents/*Agent.js` | Design agents |
-| `src/agents/reviewers.js` | AI expert reviewers |
-| `src/agents/pricing.js` | Mock + live distributor pricing |
-| `src/agents/auth.js` | Optional API-key auth |
-| `src/agents/langgraphOrchestrator.js` | Main orchestrator |
-| `src/agents/api.js` | HTTP routes |
-| `public/agents.html` | UI |
-| `docs/VISION_AND_ARCHITECTURE.md` | Vision |
-| `docs/BUILD_LOG.md` | History |
+| `src/agents/auth.js` | Register / login / API keys / sessions |
+| `src/agents/pricing.js` | Mock + DigiKey + Mouser + Octopart |
+| `src/agents/exportStl.js` | ASCII STL generator |
+| `src/agents/exportKicad.js` | KiCad sch/pcb exporter |
+| `src/agents/langgraphOrchestrator.js` | Orchestrator |
+| `src/agents/api.js` | HTTP API |
 
 ---
 
-## Intentionally still future
+## Honest limits
 
-- Full password / OAuth accounts + multi-tenant DB
-- Server-side STEP/STL generation
-- Production KiCad project with footprints & routing
-- Broader live distributor coverage (Octopart fully wired)
-
----
-
-## Philosophy
-
-- Specialized agents, not one monolith
-- Shared project state as source of truth
-- AI reviewers first; humans only for hard cases
-- Start narrow and real; improve from feedback
+- KiCad export uses **placeholder footprints** – assign real ones in KiCad
+- STL is a **simple enclosure shell**, not a full product assembly
+- User store is **JSON files** – fine for demo / small teams, not large multi-tenant SaaS
+- No Google/GitHub OAuth yet
