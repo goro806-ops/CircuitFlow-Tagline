@@ -1,8 +1,11 @@
 {
   "name": "circuitflow-platform",
-  "version": "1.0.0",
+  "version": "1.8.0",
   "description": "CircuitFlow - Autonomous Electronics Design & Manufacturing SaaS Platform",
   "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.js",
     "test": "node tests/engine.test.js",

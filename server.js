@@ -23,22 +23,27 @@ const ngspiceEngine = require('./src/engine/ngspice');
 const exportEngine = require('./src/engine/export');
 const businessEngine = require('./src/engine/business');
 
-// Multi-agent system API
 const agentsApi = require('./src/agents/api');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0'; // required for Render / Docker / cloud
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ---------------------------------------------------------------
-// Multi-agent pipeline API (new)
-// ---------------------------------------------------------------
+// Health check for Render / load balancers
+app.get('/health', (req, res) => {
+  res.status(200).json({ ok: true, service: 'circuitflow', version: '1.8' });
+});
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ ok: true, service: 'circuitflow', version: '1.8' });
+});
+
 app.use('/api/agents', agentsApi);
 
-// Business & Monetization Endpoints
 app.get('/api/business/pricing', (req, res) => {
   try {
     const tiers = businessEngine.getSubscriptionTiers();
@@ -68,7 +73,6 @@ app.post('/api/business/turnkey-quote', (req, res) => {
   }
 });
 
-// Legacy / existing API Routes
 app.post('/api/generate/architecture', async (req, res) => {
   try {
     const { prompt, constraints, apiKey, provider } = req.body;
@@ -264,9 +268,11 @@ app.post('/api/export/package', async (req, res) => {
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`CircuitFlow Platform running at http://localhost:${PORT}`);
-    console.log(`Multi-agent API: POST http://localhost:${PORT}/api/agents/run`);
+  app.listen(PORT, HOST, () => {
+    console.log(`CircuitFlow listening on http://${HOST}:${PORT}`);
+    console.log(`Health: /health`);
+    console.log(`Agents UI: /agents.html`);
+    console.log(`Agents API: POST /api/agents/run`);
   });
 }
 

@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: circuitflow
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: HOST
+        value: "0.0.0.0"
+      # Optional – add in Render dashboard if you have them:
+      # OPENAI_API_KEY
+      # DIGIKEY_CLIENT_ID / DIGIKEY_CLIENT_SECRET
+      # MOUSER_API_KEY
+      # NEXAR_TOKEN
