@@ -1,6 +1,6 @@
 # CircuitFlow Multi-Agent System
 
-**Status: foundation complete (v1.5)**  
+**Status: v1.6** (foundation complete + pricing layer)  
 This is the entry document for the multi-agent pipeline. You should not need to reverse-engineer the design from chat history.
 
 ---
@@ -11,15 +11,16 @@ Turns a natural-language hardware idea into a structured project state:
 
 1. **SpecAgent** – constraints (optional LLM)
 2. **ArchitectureAgent** – MCU / power / wireless blocks
-3. **ComponentAgent** – first-pass BOM (optional LLM suggestions)
+3. **ComponentAgent** – first-pass BOM + pricing enrichment (optional LLM)
 4. **SchematicAgent** – simplified netlist
 5. **PCBLayoutAgent** – board size, layers, placements
 6. **FirmwareAgent** – firmware scaffold
 7. **EnclosureAgent** – parametric enclosure
 8. **Reviewers** – Schematic, Layout, PowerThermal, DFM (+ optional LLM)
-9. **Revision loops** – up to 2 automatic rework cycles
+9. **Revision loops** – up to 2 automatic rework cycles (improved targeting)
 10. **Risk aggregation** → **Human escalation** when needed
 11. **Persistence** – JSON under `data/projects/` + LangGraph checkpoints
+12. **Pricing service** – mock catalogue today, live distributor-ready interface
 
 ---
 
@@ -54,6 +55,14 @@ Optional checkpoint DB path:
 export CIRCUITFLOW_CHECKPOINT_DB=./data/checkpoints.sqlite
 ```
 
+Future live pricing (interface already present):
+
+```bash
+export DIGIKEY_CLIENT_ID=...
+export MOUSER_API_KEY=...
+export OCTOPART_API_KEY=...
+```
+
 ---
 
 ## Source map
@@ -65,6 +74,7 @@ export CIRCUITFLOW_CHECKPOINT_DB=./data/checkpoints.sqlite
 | `src/agents/reviewers.js` | AI expert reviewers |
 | `src/agents/risk.js` | Confidence / risk aggregation |
 | `src/agents/humanEscalationAgent.js` | Human brief packaging |
+| `src/agents/pricing.js` | Part pricing & availability service |
 | `src/agents/langgraphOrchestrator.js` | Main LangGraph orchestrator |
 | `src/agents/orchestrator.js` | Classic fallback pipeline |
 | `src/agents/llm.js` | Optional OpenAI helpers |
@@ -95,11 +105,11 @@ curl -X POST http://localhost:3000/api/agents/projects/PROJECT_ID/review \
 ## What is intentionally not done yet
 
 - Pin-accurate / production KiCad schematics and autorouting
-- Live distributor APIs (DigiKey, Mouser, Octopart)
+- Live distributor API calls (interface ready; keys not yet wired)
 - Multi-user auth and cloud DB
 - Full mechanical CAD (STEP/STL export)
 
-These are **next product phases**, not missing pieces of this foundation.
+These are **next product phases**, not missing pieces of the current foundation.
 
 ---
 
