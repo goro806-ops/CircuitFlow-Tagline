@@ -1,11 +1,13 @@
 /**
- * Multi-agent HTTP API – /api/agents  (v1.7)
+ * Multi-agent HTTP API – /api/agents  (v1.8)
  */
 
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const { optionalAuth, registerUser } = require("./auth");
+const { optionalAuth, registerUser, loginUser } = require("./auth");
+const { generateEnclosureStl } = require("./exportStl");
+const { generateKicadProject } = require("./exportKicad");
 
 const router = express.Router();
 const PROJECTS_DIR = path.join(process.cwd(), "data", "projects");
@@ -57,18 +59,47 @@ function saveProjectFile(project) {
   return filePath;
 }
 
-/** Register a simple user and get an API key */
+function assertOwner(req, project) {
+  if (req.user && project.owner_id && project.owner_id !== req.user.user_id) {
+    const err = new Error("Not your project");
+    err.status = 403;
+    throw err;
+  }
+}
+
+/** Register – supports name only OR email+password */
 router.post("/auth/register", (req, res) => {
   try {
-    const name = (req.body && req.body.name) || "anonymous";
-    const user = registerUser(name);
+    const { name, email, password } = req.body || {};
+    const user = registerUser({ name, email, password });
     res.json({
       success: true,
       user,
-      usage: "Send header Authorization: Bearer <api_key> or X-API-Key: <api_key>"
+      usage: {
+        api_key: "Authorization: Bearer <api_key>",
+        login: email && password ? "POST /api/agents/auth/login with email+password" : null
+      }
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+/** Login with email + password → session token */
+router.post("/auth/login", (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: "email and password required" });
+    }
+    const result = loginUser(email, password);
+    res.json({
+      success: true,
+      ...result,
+      usage: "Authorization: Bearer <token>"
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -88,7 +119,6 @@ router.post("/run", async (req, res) => {
 
     const project = await runPipeline(prompt);
 
-    // Attach owner if authenticated
     if (req.user) {
       project.owner_id = req.user.user_id;
       project.owner_name = req.user.name;
@@ -132,8 +162,11 @@ router.post("/run", async (req, res) => {
 router.get("/projects", (req, res) => {
   try {
     const userId = req.user ? req.user.user_id : null;
-    // If authenticated, show own projects; if not, show all (demo mode)
-    res.json({ success: true, projects: listSavedProjects(userId), filtered_by_owner: !!userId });
+    res.json({
+      success: true,
+      projects: listSavedProjects(userId),
+      filtered_by_owner: !!userId
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -142,9 +175,7 @@ router.get("/projects", (req, res) => {
 router.get("/projects/:id", (req, res) => {
   try {
     const { project } = loadProjectFile(req.params.id);
-    if (req.user && project.owner_id && project.owner_id !== req.user.user_id) {
-      return res.status(403).json({ success: false, error: "Not your project" });
-    }
+    assertOwner(req, project);
     res.json({ success: true, project });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
@@ -154,9 +185,7 @@ router.get("/projects/:id", (req, res) => {
 router.get("/projects/:id/export", (req, res) => {
   try {
     const { project } = loadProjectFile(req.params.id);
-    if (req.user && project.owner_id && project.owner_id !== req.user.user_id) {
-      return res.status(403).json({ success: false, error: "Not your project" });
-    }
+    assertOwner(req, project);
     res.setHeader("Content-Type", "application/json");
     res.setHeader(
       "Content-Disposition",
@@ -168,10 +197,10 @@ router.get("/projects/:id/export", (req, res) => {
   }
 });
 
-/** Export OpenSCAD script for enclosure */
 router.get("/projects/:id/enclosure.scad", (req, res) => {
   try {
     const { project } = loadProjectFile(req.params.id);
+    assertOwner(req, project);
     const scad = project.enclosure?.export?.openscad;
     if (!scad) {
       return res.status(404).json({ success: false, error: "No OpenSCAD export on this project" });
@@ -182,6 +211,73 @@ router.get("/projects/:id/enclosure.scad", (req, res) => {
       `attachment; filename="${project.project_id}_enclosure.scad"`
     );
     res.send(scad);
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+/** Server-generated ASCII STL */
+router.get("/projects/:id/enclosure.stl", (req, res) => {
+  try {
+    const { project } = loadProjectFile(req.params.id);
+    assertOwner(req, project);
+    if (!project.enclosure) {
+      return res.status(404).json({ success: false, error: "No enclosure on this project" });
+    }
+    const stl = generateEnclosureStl(project.enclosure);
+    res.setHeader("Content-Type", "application/sla");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${project.project_id}_enclosure.stl"`
+    );
+    res.send(stl);
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+/** KiCad project files (JSON bundle with .kicad_sch / .kicad_pcb content) */
+router.get("/projects/:id/kicad", (req, res) => {
+  try {
+    const { project } = loadProjectFile(req.params.id);
+    assertOwner(req, project);
+    if (!project.schematic || !project.pcb) {
+      return res.status(404).json({
+        success: false,
+        error: "Project needs schematic and PCB to export KiCad"
+      });
+    }
+    const bundle = generateKicadProject(project);
+    res.json({ success: true, kicad: bundle });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+/** Download individual KiCad schematic */
+router.get("/projects/:id/kicad.sch", (req, res) => {
+  try {
+    const { project } = loadProjectFile(req.params.id);
+    assertOwner(req, project);
+    const bundle = generateKicadProject(project);
+    const name = Object.keys(bundle.files).find(f => f.endsWith(".kicad_sch"));
+    res.setHeader("Content-Type", "text/plain");
+    res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+    res.send(bundle.files[name]);
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.get("/projects/:id/kicad.pcb", (req, res) => {
+  try {
+    const { project } = loadProjectFile(req.params.id);
+    assertOwner(req, project);
+    const bundle = generateKicadProject(project);
+    const name = Object.keys(bundle.files).find(f => f.endsWith(".kicad_pcb"));
+    res.setHeader("Content-Type", "text/plain");
+    res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+    res.send(bundle.files[name]);
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }
@@ -213,7 +309,11 @@ router.post("/projects/:id/review", (req, res) => {
     project.escalation.reviewed_by = reviewed_by || (req.user && req.user.name) || "anonymous";
     project.escalation.reviewed_at = new Date().toISOString();
     project.escalation.status =
-      decision === "approved" ? "human_approved" : decision === "rejected" ? "human_rejected" : "human_changes_requested";
+      decision === "approved"
+        ? "human_approved"
+        : decision === "rejected"
+          ? "human_rejected"
+          : "human_changes_requested";
 
     if (decision === "approved") project.status = "approved";
     else if (decision === "rejected") project.status = "failed";
@@ -261,49 +361,38 @@ router.get("/status", (req, res) => {
 
   res.json({
     success: true,
-    version: "1.7",
+    version: "1.8",
     foundation: "complete",
     orchestrator: "langgraph",
     llm_enabled: llm,
     pricing: {
       mode: pricingLive ? "live" : "mock",
       providers: liveProviders,
-      note: pricingLive
-        ? "Live distributor keys detected"
-        : "Using mock catalogue – set DIGIKEY_CLIENT_ID+SECRET / MOUSER_API_KEY / OCTOPART_API_KEY for live"
+      note: "Set DIGIKEY_CLIENT_ID+SECRET, MOUSER_API_KEY, and/or NEXAR_TOKEN / OCTOPART_API_KEY"
     },
     auth: {
-      mode: "optional_api_key",
+      mode: "api_key_or_password",
       register: "POST /api/agents/auth/register",
-      note: "Send Authorization: Bearer <api_key> to own projects"
+      login: "POST /api/agents/auth/login",
+      note: "Bearer api_key or session token; email+password supported"
     },
+    exports: ["json", "openscad", "stl", "kicad_sch", "kicad_pcb"],
     checkpointer,
-    agents: [
-      "SpecAgent",
-      "ArchitectureAgent",
-      "ComponentAgent",
-      "SchematicAgent (pin-aware)",
-      "PCBLayoutAgent",
-      "FirmwareAgent",
-      "EnclosureAgent (OpenSCAD export)",
-      "SchematicReviewer",
-      "LayoutReviewer",
-      "PowerThermalReviewer",
-      "DFMReviewer",
-      "LLMReviewer (optional)",
-      "HumanEscalationAgent"
-    ],
     endpoints: {
       register: "POST /api/agents/auth/register",
+      login: "POST /api/agents/auth/login",
       run: "POST /api/agents/run",
       projects: "GET /api/agents/projects",
       project: "GET /api/agents/projects/:id",
       export: "GET /api/agents/projects/:id/export",
       enclosure_scad: "GET /api/agents/projects/:id/enclosure.scad",
+      enclosure_stl: "GET /api/agents/projects/:id/enclosure.stl",
+      kicad: "GET /api/agents/projects/:id/kicad",
+      kicad_sch: "GET /api/agents/projects/:id/kicad.sch",
+      kicad_pcb: "GET /api/agents/projects/:id/kicad.pcb",
       review: "POST /api/agents/projects/:id/review",
       status: "GET /api/agents/status",
-      ui: "/agents.html",
-      docs: "docs/AGENTS.md"
+      ui: "/agents.html"
     }
   });
 });
