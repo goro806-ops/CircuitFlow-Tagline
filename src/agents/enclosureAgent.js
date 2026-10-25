@@ -1,6 +1,6 @@
 /**
- * EnclosureAgent (v0)
- * Produces a parametric enclosure description from PCB outline + form factor.
+ * EnclosureAgent (v1.7)
+ * Parametric enclosure + OpenSCAD-style export script.
  */
 
 const { addHistory } = require("./state");
@@ -38,33 +38,72 @@ function runEnclosureAgent(project) {
     features.push({ type: "strap_lugs", notes: "Optional strap or clip interfaces" });
   }
 
+  // OpenSCAD-style parametric script (can be pasted into OpenSCAD)
+  const scad = `// CircuitFlow parametric enclosure – generated
+// Form: ${form}
+outer_w = ${outerW.toFixed(2)};
+outer_h = ${outerH.toFixed(2)};
+outer_d = ${heightMm.toFixed(2)};
+wall = ${wallMm.toFixed(2)};
+inner_w = ${innerW.toFixed(2)};
+inner_h = ${innerH.toFixed(2)};
+
+difference() {
+  // Outer shell
+  cube([outer_w, outer_h, outer_d], center = false);
+  // Inner cavity
+  translate([wall, wall, wall])
+    cube([inner_w, inner_h, outer_d], center = false);
+}
+
+// Corner standoffs (simplified)
+standoff_r = 2.0;
+standoff_h = ${Math.max(2, heightMm - wallMm * 2).toFixed(2)};
+for (x = [wall + 3, outer_w - wall - 3])
+  for (y = [wall + 3, outer_h - wall - 3])
+    translate([x, y, wall])
+      cylinder(r = standoff_r, h = standoff_h, $fn = 24);
+`;
+
   const enclosure = {
-    format: "circuitflow-enclosure-v0",
+    format: "circuitflow-enclosure-v1",
     form_factor: form,
-    outer_mm: { width: Math.round(outerW * 10) / 10, height: Math.round(outerH * 10) / 10, depth: heightMm },
-    inner_mm: { width: Math.round(innerW * 10) / 10, height: Math.round(innerH * 10) / 10 },
+    outer_mm: {
+      width: Math.round(outerW * 10) / 10,
+      height: Math.round(outerH * 10) / 10,
+      depth: heightMm
+    },
+    inner_mm: {
+      width: Math.round(innerW * 10) / 10,
+      height: Math.round(innerH * 10) / 10
+    },
     wall_mm: wallMm,
     material: form === "wearable" ? "PC/ABS or TPU soft-touch" : "ABS or PC",
     features,
+    export: {
+      openscad: scad,
+      notes: "Paste the OpenSCAD script into OpenSCAD to generate STL. Full STEP export still future work."
+    },
     notes: [
-      "Parametric description only – not a full CAD model yet.",
-      "Export to STEP/STL will come in a later agent version."
+      "Parametric enclosure with OpenSCAD export (v1.7).",
+      "Not a full mechanical CAD assembly yet."
     ],
-    confidence: 0.6
+    confidence: 0.68
   };
 
   project.enclosure = enclosure;
 
   addHistory(project, "EnclosureAgent", "generated_enclosure", {
     form,
-    outer: enclosure.outer_mm
+    outer: enclosure.outer_mm,
+    has_openscad: true
   });
 
   return {
     project,
     confidence: enclosure.confidence,
     risk_level: "low",
-    summary: `Enclosure ${enclosure.outer_mm.width}×${enclosure.outer_mm.height}×${enclosure.outer_mm.depth} mm (${form})`
+    summary: `Enclosure ${enclosure.outer_mm.width}×${enclosure.outer_mm.height}×${enclosure.outer_mm.depth} mm (${form}) + OpenSCAD`
   };
 }
 

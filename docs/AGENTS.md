@@ -1,26 +1,24 @@
 # CircuitFlow Multi-Agent System
 
-**Status: v1.6** (foundation complete + pricing layer)  
-This is the entry document for the multi-agent pipeline. You should not need to reverse-engineer the design from chat history.
+**Status: v1.7**  
+Entry document for the multi-agent pipeline.
 
 ---
 
 ## What it does
 
-Turns a natural-language hardware idea into a structured project state:
-
 1. **SpecAgent** – constraints (optional LLM)
 2. **ArchitectureAgent** – MCU / power / wireless blocks
-3. **ComponentAgent** – first-pass BOM + pricing enrichment (optional LLM)
-4. **SchematicAgent** – simplified netlist
+3. **ComponentAgent** – BOM + pricing (mock or live DigiKey/Mouser)
+4. **SchematicAgent** – pin-aware netlist
 5. **PCBLayoutAgent** – board size, layers, placements
 6. **FirmwareAgent** – firmware scaffold
-7. **EnclosureAgent** – parametric enclosure
+7. **EnclosureAgent** – parametric enclosure + OpenSCAD export
 8. **Reviewers** – Schematic, Layout, PowerThermal, DFM (+ optional LLM)
-9. **Revision loops** – up to 2 automatic rework cycles (improved targeting)
-10. **Risk aggregation** → **Human escalation** when needed
-11. **Persistence** – JSON under `data/projects/` + LangGraph checkpoints
-12. **Pricing service** – mock catalogue today, live distributor-ready interface
+9. **Revision loops** – up to 2 automatic rework cycles
+10. **Risk aggregation** → **Human escalation**
+11. **Persistence** + LangGraph checkpoints
+12. **Optional API-key auth** for project ownership
 
 ---
 
@@ -28,39 +26,47 @@ Turns a natural-language hardware idea into a structured project state:
 
 ```bash
 npm install
-npm run test:agents          # smoke test
-npm run agents:example       # CLI
-npm start                    # server
+npm run test:agents
+npm run agents:example
+npm start
 ```
 
 | Surface | URL / command |
 |---------|----------------|
 | Web UI | http://localhost:3000/agents.html |
+| Register user | `POST /api/agents/auth/register` `{ "name": "alice" }` |
 | Run pipeline | `POST /api/agents/run` `{ "prompt": "..." }` |
 | List projects | `GET /api/agents/projects` |
 | Load project | `GET /api/agents/projects/:id` |
+| Enclosure SCAD | `GET /api/agents/projects/:id/enclosure.scad` |
 | Human decision | `POST /api/agents/projects/:id/review` |
 | Export JSON | `GET /api/agents/projects/:id/export` |
 | Status | `GET /api/agents/status` |
 
-Optional LLM:
+### Optional env
 
 ```bash
 export OPENAI_API_KEY=sk-...
-```
-
-Optional checkpoint DB path:
-
-```bash
+export DIGIKEY_CLIENT_ID=...
+export DIGIKEY_CLIENT_SECRET=...
+export MOUSER_API_KEY=...
 export CIRCUITFLOW_CHECKPOINT_DB=./data/checkpoints.sqlite
 ```
 
-Future live pricing (interface already present):
+---
+
+## Auth (optional)
 
 ```bash
-export DIGIKEY_CLIENT_ID=...
-export MOUSER_API_KEY=...
-export OCTOPART_API_KEY=...
+curl -X POST http://localhost:3000/api/agents/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"alice"}'
+# → { api_key: "cf_..." }
+
+curl -X POST http://localhost:3000/api/agents/run \
+  -H "Authorization: Bearer cf_..." \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"BLE wearable with IMU under $15"}'
 ```
 
 ---
@@ -69,53 +75,31 @@ export OCTOPART_API_KEY=...
 
 | Path | Role |
 |------|------|
-| `src/agents/state.js` | Project state (digital twin) |
+| `src/agents/state.js` | Digital twin |
 | `src/agents/*Agent.js` | Design agents |
 | `src/agents/reviewers.js` | AI expert reviewers |
-| `src/agents/risk.js` | Confidence / risk aggregation |
-| `src/agents/humanEscalationAgent.js` | Human brief packaging |
-| `src/agents/pricing.js` | Part pricing & availability service |
-| `src/agents/langgraphOrchestrator.js` | Main LangGraph orchestrator |
-| `src/agents/orchestrator.js` | Classic fallback pipeline |
-| `src/agents/llm.js` | Optional OpenAI helpers |
-| `src/agents/checkpointer.js` | Sqlite / Memory checkpointer |
+| `src/agents/pricing.js` | Mock + live distributor pricing |
+| `src/agents/auth.js` | Optional API-key auth |
+| `src/agents/langgraphOrchestrator.js` | Main orchestrator |
 | `src/agents/api.js` | HTTP routes |
-| `public/agents.html` | Multi-agent UI |
-| `docs/VISION_AND_ARCHITECTURE.md` | Product / architecture vision |
-| `docs/BUILD_LOG.md` | Build history |
+| `public/agents.html` | UI |
+| `docs/VISION_AND_ARCHITECTURE.md` | Vision |
+| `docs/BUILD_LOG.md` | History |
 
 ---
 
-## Human-in-the-loop
+## Intentionally still future
 
-When overall risk is high or confidence is low, `status` becomes `needs_human` and `escalation` is filled.
-
-Record a human decision:
-
-```bash
-curl -X POST http://localhost:3000/api/agents/projects/PROJECT_ID/review \
-  -H "Content-Type: application/json" \
-  -d '{"decision":"approved","comments":"OK to proceed","reviewed_by":"alice"}'
-```
-
-`decision`: `approved` | `changes_requested` | `rejected`
+- Full password / OAuth accounts + multi-tenant DB
+- Server-side STEP/STL generation
+- Production KiCad project with footprints & routing
+- Broader live distributor coverage (Octopart fully wired)
 
 ---
 
-## What is intentionally not done yet
-
-- Pin-accurate / production KiCad schematics and autorouting
-- Live distributor API calls (interface ready; keys not yet wired)
-- Multi-user auth and cloud DB
-- Full mechanical CAD (STEP/STL export)
-
-These are **next product phases**, not missing pieces of the current foundation.
-
----
-
-## Philosophy (unchanged)
+## Philosophy
 
 - Specialized agents, not one monolith
 - Shared project state as source of truth
 - AI reviewers first; humans only for hard cases
-- Start narrow and real; improve agents from feedback
+- Start narrow and real; improve from feedback
