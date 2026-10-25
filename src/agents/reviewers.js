@@ -1,6 +1,7 @@
 /**
- * AI Expert Reviewer Agents (v1.1)
+ * AI Expert Reviewer Agents (v1.6)
  * Rule-based reviewers + optional LLM overall review.
+ * Improved revision targeting.
  */
 
 const { addHistory, addReview } = require("./state");
@@ -212,33 +213,40 @@ async function runReviewers(project) {
 
   let r = runSchematicReviewer(project);
   project = r.project;
-  results.push(r);
+  results.push({ ...r, name: "SchematicReviewer" });
 
   r = runLayoutReviewer(project);
   project = r.project;
-  results.push(r);
+  results.push({ ...r, name: "LayoutReviewer" });
 
   r = runPowerThermalReviewer(project);
   project = r.project;
-  results.push(r);
+  results.push({ ...r, name: "PowerThermalReviewer" });
 
   r = runDFMReviewer(project);
   project = r.project;
-  results.push(r);
+  results.push({ ...r, name: "DFMReviewer" });
 
   const llmR = await runLLMReviewer(project);
   if (llmR) {
     project = llmR.project;
-    results.push(llmR);
+    results.push({ ...llmR, name: "LLMReviewer" });
   }
 
   const needsRevision = results.some(x => x.status === "needs_changes" || x.status === "rejected");
 
+  // Improved revision targeting priority
   let revisionTarget = null;
-  if (results[0].status !== "approved") revisionTarget = "schematic";
-  else if (results[1].status !== "approved" || results[3].status !== "approved") revisionTarget = "pcb";
-  else if (results[2].status !== "approved") revisionTarget = "schematic";
-  else if (llmR && llmR.status !== "approved") revisionTarget = "pcb";
+  const schematicBad = results.find(x => x.name === "SchematicReviewer" && x.status !== "approved");
+  const layoutBad = results.find(x => x.name === "LayoutReviewer" && x.status !== "approved");
+  const dfmBad = results.find(x => x.name === "DFMReviewer" && x.status !== "approved");
+  const powerBad = results.find(x => x.name === "PowerThermalReviewer" && x.status !== "approved");
+  const llmBad = results.find(x => x.name === "LLMReviewer" && x.status !== "approved");
+
+  if (schematicBad) revisionTarget = "schematic";
+  else if (layoutBad || dfmBad) revisionTarget = "pcb";
+  else if (powerBad) revisionTarget = "schematic"; // power issues often need schematic/BOM changes
+  else if (llmBad) revisionTarget = "pcb";
 
   const overallConfidence = results.reduce((s, x) => s + x.confidence, 0) / results.length;
   const overallRisk = results.some(x => x.risk_level === "high")

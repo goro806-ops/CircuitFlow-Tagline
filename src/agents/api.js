@@ -1,5 +1,5 @@
 /**
- * Multi-agent HTTP API – /api/agents
+ * Multi-agent HTTP API – /api/agents  (v1.6)
  */
 
 const express = require("express");
@@ -23,13 +23,15 @@ function listSavedProjects() {
           created_at: data.created_at,
           updated_at: data.updated_at,
           prompt: data.user_intent?.raw_text?.slice(0, 120),
-          needs_human: data.status === "needs_human" || !!data.escalation
+          needs_human: data.status === "needs_human" || !!data.escalation,
+          bom_total: data.bom?.estimated_total || null
         };
       } catch {
         return null;
       }
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
 }
 
 function loadProjectFile(id) {
@@ -74,6 +76,8 @@ router.post("/run", async (req, res) => {
         constraints: project.user_intent?.parsed_constraints,
         architecture_mcu: project.architecture?.mcu_family,
         bom_estimate: project.bom?.estimated_total,
+        bom_source: project.bom?.source,
+        priced_items: project.bom?.priced_items,
         schematic_components: project.schematic?.components?.length,
         pcb: project.pcb
           ? {
@@ -112,9 +116,6 @@ router.get("/projects/:id", (req, res) => {
   }
 });
 
-/**
- * Export full project JSON as download
- */
 router.get("/projects/:id/export", (req, res) => {
   try {
     const { project } = loadProjectFile(req.params.id);
@@ -129,11 +130,6 @@ router.get("/projects/:id/export", (req, res) => {
   }
 });
 
-/**
- * Record human review decision for escalated projects
- * Body: { decision, comments?, reviewed_by? }
- * decision: approved | changes_requested | rejected
- */
 router.post("/projects/:id/review", (req, res) => {
   try {
     const { decision, comments, reviewed_by } = req.body || {};
@@ -190,6 +186,7 @@ router.post("/projects/:id/review", (req, res) => {
 router.get("/status", (req, res) => {
   let llm = false;
   let checkpointer = "unknown";
+  let pricingLive = false;
   try {
     llm = require("./llm").isLLMEnabled();
   } catch (_) {}
@@ -198,13 +195,22 @@ router.get("/status", (req, res) => {
   } catch (_) {
     checkpointer = "memory";
   }
+  try {
+    pricingLive = require("./pricing").isLivePricingEnabled();
+  } catch (_) {}
 
   res.json({
     success: true,
-    version: "1.5",
+    version: "1.6",
     foundation: "complete",
-    orchestrator: "langgraph-v1.5",
+    orchestrator: "langgraph-v1.5+",
     llm_enabled: llm,
+    pricing: {
+      mode: pricingLive ? "live" : "mock",
+      note: pricingLive
+        ? "Real distributor keys detected"
+        : "Using mock catalogue – set DIGIKEY_CLIENT_ID / MOUSER_API_KEY / OCTOPART_API_KEY for live"
+    },
     checkpointer,
     agents: [
       "SpecAgent",
@@ -229,7 +235,7 @@ router.get("/status", (req, res) => {
       review: "POST /api/agents/projects/:id/review",
       status: "GET /api/agents/status",
       ui: "/agents.html",
-      docs: "/docs via repo docs/AGENTS.md"
+      docs: "docs/AGENTS.md"
     }
   });
 });

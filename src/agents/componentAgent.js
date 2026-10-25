@@ -1,10 +1,11 @@
 /**
- * ComponentAgent
- * Builds a first-pass BOM. Uses internal library + optional LLM suggestions.
+ * ComponentAgent (v1.6)
+ * Builds a first-pass BOM. Uses internal library + optional LLM + pricing service.
  */
 
 const { addHistory } = require("./state");
 const { isLLMEnabled, llmSuggestBom } = require("./llm");
+const { enrichBomLineItems } = require("./pricing");
 
 const PART_LIBRARY = {
   mcu: {
@@ -110,11 +111,11 @@ async function runComponentAgent(project) {
   let { lineItems, totalLow, totalHigh } = buildRuleBasedBom(project);
   let extraNotes = [];
 
+  // Optional LLM suggestions
   if (isLLMEnabled()) {
     const llmBom = await llmSuggestBom(project.architecture, constraints);
     if (llmBom && Array.isArray(llmBom.items) && llmBom.items.length) {
       source = "rules+llm";
-      // Merge: keep rule MCU/power core, append unique LLM suggestions as alternates/notes
       llmBom.items.forEach((item, i) => {
         const exists = lineItems.some(
           li => li.mpn && item.mpn && li.mpn.toLowerCase() === String(item.mpn).toLowerCase()
@@ -138,9 +139,27 @@ async function runComponentAgent(project) {
         }
       });
       if (llmBom.notes) extraNotes.push(llmBom.notes);
-      totalLow = Math.round(totalLow * 100) / 100;
-      totalHigh = Math.round(totalHigh * 100) / 100;
     }
+  }
+
+  // Pricing enrichment (mock catalogue today, real APIs later)
+  const { lineItems: pricedItems, pricedCount } = await enrichBomLineItems(lineItems);
+  lineItems = pricedItems;
+
+  // Recalculate totals from enriched prices
+  totalLow = 0;
+  totalHigh = 0;
+  lineItems.forEach(item => {
+    const p = Number(item.unit_price_usd) || 0;
+    totalLow += p * 0.92;
+    totalHigh += p * 1.18;
+  });
+  totalLow = Math.round(totalLow * 100) / 100;
+  totalHigh = Math.round(totalHigh * 100) / 100;
+
+  if (pricedCount > 0) {
+    source = source.includes("llm") ? "rules+llm+pricing" : "rules+pricing";
+    extraNotes.push(`Pricing enriched for ${pricedCount}/${lineItems.length} line items (mock catalogue).`);
   }
 
   const bom = {
@@ -150,12 +169,14 @@ async function runComponentAgent(project) {
     target_cost: constraints.target_cost || null,
     meets_target: constraints.target_cost ? totalHigh <= constraints.target_cost * 1.15 : null,
     source,
+    priced_items: pricedCount,
     notes: [
       "First-pass BOM.",
-      source.includes("llm") ? "Includes LLM-suggested parts (verify availability)." : "Rule-based library only.",
+      source.includes("llm") ? "Includes LLM-suggested parts (verify availability)." : null,
+      source.includes("pricing") ? "Prices enriched via pricing service (currently mock)." : "Rule-based library prices only.",
       ...extraNotes
-    ],
-    confidence: source.includes("llm") ? 0.72 : 0.62
+    ].filter(Boolean),
+    confidence: source.includes("pricing") ? 0.74 : source.includes("llm") ? 0.72 : 0.62
   };
 
   project.bom = bom;
@@ -164,18 +185,23 @@ async function runComponentAgent(project) {
     item_count: lineItems.length,
     estimated_low: totalLow,
     estimated_high: totalHigh,
-    source
+    source,
+    priced_items: pricedCount
   });
 
   let risk = "medium";
   if (constraints.target_cost && totalLow > constraints.target_cost) risk = "high";
   else if (bom.meets_target === true) risk = "low";
 
+  // Flag long lead times as medium risk
+  const longLead = lineItems.some(i => (i.lead_weeks || 0) >= 4);
+  if (longLead && risk === "low") risk = "medium";
+
   return {
     project,
     confidence: bom.confidence,
     risk_level: risk,
-    summary: `BOM (${source}): ${lineItems.length} items, $${totalLow}–$${totalHigh}`
+    summary: `BOM (${source}): ${lineItems.length} items, $${totalLow}–$${totalHigh}, ${pricedCount} priced`
   };
 }
 
