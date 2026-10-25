@@ -1,14 +1,6 @@
 /**
- * Pricing / Distributor service (v1.7)
- *
- * - Mock catalogue (always available)
- * - Optional live adapters for DigiKey / Mouser / Octopart
- *   when the corresponding env vars are set.
- *
- * Env vars (any one enables live mode):
- *   DIGIKEY_CLIENT_ID + DIGIKEY_CLIENT_SECRET
- *   MOUSER_API_KEY
- *   OCTOPART_API_KEY
+ * Pricing / Distributor service (v1.8)
+ * Mock + DigiKey + Mouser + Octopart (Nexar) adapters
  */
 
 const MOCK_CATALOGUE = {
@@ -32,33 +24,22 @@ const MOCK_CATALOGUE = {
 };
 
 function isLivePricingEnabled() {
-  return Boolean(
-    (process.env.DIGIKEY_CLIENT_ID && process.env.DIGIKEY_CLIENT_SECRET) ||
-    process.env.MOUSER_API_KEY ||
-    process.env.OCTOPART_API_KEY
-  );
+  return getLiveProviders().length > 0;
 }
 
 function getLiveProviders() {
   const providers = [];
   if (process.env.DIGIKEY_CLIENT_ID && process.env.DIGIKEY_CLIENT_SECRET) providers.push("digikey");
   if (process.env.MOUSER_API_KEY) providers.push("mouser");
-  if (process.env.OCTOPART_API_KEY) providers.push("octopart");
+  if (process.env.OCTOPART_API_KEY || process.env.NEXAR_TOKEN) providers.push("octopart");
   return providers;
 }
 
-/**
- * Live DigiKey product search (simplified).
- * Docs: https://developer.digikey.com/
- * Returns null on any failure so callers fall back to mock.
- */
 async function lookupDigiKey(mpn) {
   const clientId = process.env.DIGIKEY_CLIENT_ID;
   const clientSecret = process.env.DIGIKEY_CLIENT_SECRET;
   if (!clientId || !clientSecret) return null;
-
   try {
-    // Token
     const tokenRes = await fetch("https://api.digikey.com/v1/oauth2/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -73,76 +54,57 @@ async function lookupDigiKey(mpn) {
     const accessToken = tokenData.access_token;
     if (!accessToken) return null;
 
-    // Keyword search
-    const searchRes = await fetch(
-      `https://api.digikey.com/products/v4/search/keyword`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "X-DIGIKEY-Client-Id": clientId,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          Keywords: mpn,
-          RecordCount: 3
-        })
-      }
-    );
+    const searchRes = await fetch("https://api.digikey.com/products/v4/search/keyword", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "X-DIGIKEY-Client-Id": clientId,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ Keywords: mpn, RecordCount: 3 })
+    });
     if (!searchRes.ok) return null;
     const searchData = await searchRes.json();
     const product = searchData?.Products?.[0] || searchData?.products?.[0];
     if (!product) return null;
-
     const priceBreaks = product.PriceBreaks || product.StandardPricing || [];
     const unitPrice = priceBreaks[0]?.Price || priceBreaks[0]?.UnitPrice || null;
-    const qtyAvailable = product.QuantityAvailable ?? product.QuantityAvailableForSale ?? null;
-
     return {
-      mpn: product.ManufacturerProductNumber || product.DigiKeyProductNumber || mpn,
-      manufacturer: product.Manufacturer?.Name || product.ManufacturerName || "Unknown",
+      mpn: product.ManufacturerProductNumber || mpn,
+      manufacturer: product.Manufacturer?.Name || "Unknown",
       unit_price_usd: unitPrice ? Number(unitPrice) : null,
-      stock: qtyAvailable,
+      stock: product.QuantityAvailable ?? null,
       lead_weeks: null,
       lifecycle: product.ProductStatus || "Unknown",
       distributor: "digikey",
       source: "digikey_live"
     };
   } catch (err) {
-    console.warn("[pricing] DigiKey lookup failed:", err.message);
+    console.warn("[pricing] DigiKey failed:", err.message);
     return null;
   }
 }
 
-/**
- * Live Mouser search (simplified).
- * Docs: https://api.mouser.com/
- */
 async function lookupMouser(mpn) {
   const apiKey = process.env.MOUSER_API_KEY;
   if (!apiKey) return null;
-
   try {
     const url = `https://api.mouser.com/api/v1/search/keyword?apiKey=${encodeURIComponent(apiKey)}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        SearchByKeywordRequest: {
-          keyword: mpn,
-          records: 3,
-          startingRecord: 0
-        }
+        SearchByKeywordRequest: { keyword: mpn, records: 3, startingRecord: 0 }
       })
     });
     if (!res.ok) return null;
     const data = await res.json();
     const part = data?.SearchResults?.Parts?.[0];
     if (!part) return null;
-
     const priceBreaks = part.PriceBreaks || [];
-    const unitPrice = priceBreaks[0]?.Price ? Number(String(priceBreaks[0].Price).replace(/[^0-9.]/g, "")) : null;
-
+    const unitPrice = priceBreaks[0]?.Price
+      ? Number(String(priceBreaks[0].Price).replace(/[^0-9.]/g, ""))
+      : null;
     return {
       mpn: part.ManufacturerPartNumber || mpn,
       manufacturer: part.Manufacturer || "Unknown",
@@ -154,7 +116,63 @@ async function lookupMouser(mpn) {
       source: "mouser_live"
     };
   } catch (err) {
-    console.warn("[pricing] Mouser lookup failed:", err.message);
+    console.warn("[pricing] Mouser failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Octopart / Nexar GraphQL (simplified)
+ * Uses OCTOPART_API_KEY or NEXAR_TOKEN
+ */
+async function lookupOctopart(mpn) {
+  const token = process.env.NEXAR_TOKEN || process.env.OCTOPART_API_KEY;
+  if (!token) return null;
+  try {
+    const query = `
+      query {
+        supSearch(q: "${String(mpn).replace(/"/g, "")}", limit: 3) {
+          results {
+            part {
+              mpn
+              manufacturer { name }
+              sellers {
+                company { name }
+                offers {
+                  inventoryLevel
+                  prices { price quantity currency }
+                }
+              }
+            }
+          }
+        }
+      }`;
+    const res = await fetch("https://api.nexar.com/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ query })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const part = data?.data?.supSearch?.results?.[0]?.part;
+    if (!part) return null;
+    const offer = part.sellers?.[0]?.offers?.[0];
+    const price = offer?.prices?.[0]?.price;
+    return {
+      mpn: part.mpn || mpn,
+      manufacturer: part.manufacturer?.name || "Unknown",
+      unit_price_usd: price != null ? Number(price) : null,
+      stock: offer?.inventoryLevel ?? null,
+      lead_weeks: null,
+      lifecycle: "Unknown",
+      distributor: part.sellers?.[0]?.company?.name || "octopart",
+      source: "octopart_live"
+    };
+  } catch (err) {
+    console.warn("[pricing] Octopart/Nexar failed:", err.message);
     return null;
   }
 }
@@ -166,25 +184,21 @@ async function lookupMock(mpn) {
   const found = Object.values(MOCK_CATALOGUE).find(
     p => p.mpn.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(p.mpn.toLowerCase())
   );
-  if (found) return { ...found, source: "mock_catalogue" };
-  return null;
+  return found ? { ...found, source: "mock_catalogue" } : null;
 }
 
-/**
- * Unified lookup: tries live providers first, then mock.
- */
 async function lookupPart(mpn) {
   if (!mpn || mpn === "TBD" || mpn === "Various") return null;
 
-  if (process.env.DIGIKEY_CLIENT_ID && process.env.DIGIKEY_CLIENT_SECRET) {
-    const dk = await lookupDigiKey(mpn);
-    if (dk && dk.unit_price_usd != null) return dk;
+  const live = await Promise.all([
+    lookupDigiKey(mpn),
+    lookupMouser(mpn),
+    lookupOctopart(mpn)
+  ]);
+  // Prefer first live hit with a price
+  for (const q of live) {
+    if (q && q.unit_price_usd != null) return q;
   }
-  if (process.env.MOUSER_API_KEY) {
-    const m = await lookupMouser(mpn);
-    if (m && m.unit_price_usd != null) return m;
-  }
-
   return lookupMock(mpn);
 }
 
@@ -218,7 +232,6 @@ async function enrichBomLineItems(lineItems) {
       });
     }
   }
-
   return { lineItems: enriched, pricedCount, liveCount };
 }
 
