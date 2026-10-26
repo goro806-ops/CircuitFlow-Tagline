@@ -1,5 +1,5 @@
 /**
- * Multi-agent HTTP API – /api/agents  (v1.9)
+ * Multi-agent HTTP API – /api/agents  (v1.9.1)
  */
 
 const express = require("express");
@@ -75,11 +75,6 @@ function assertOwner(req, project) {
   }
 }
 
-function authHeaders(req) {
-  const h = { "Content-Type": "application/json" };
-  return h;
-}
-
 router.post("/auth/register", (req, res) => {
   try {
     const { name, email, password } = req.body || {};
@@ -110,7 +105,6 @@ router.post("/auth/login", (req, res) => {
   }
 });
 
-/** Start Google OAuth – redirects browser to Google */
 router.get("/auth/google", (req, res) => {
   try {
     const url = getGoogleAuthUrl(req);
@@ -120,7 +114,6 @@ router.get("/auth/google", (req, res) => {
   }
 });
 
-/** Google OAuth callback – exchanges code, redirects to UI with token */
 router.get("/auth/google/callback", async (req, res) => {
   try {
     const { code, error } = req.query;
@@ -128,7 +121,6 @@ router.get("/auth/google/callback", async (req, res) => {
       return res.redirect(`/agents.html?auth_error=${encodeURIComponent(String(error))}`);
     }
     const result = await loginWithGoogleCode(code, req);
-    // Pass token to frontend via URL hash (not sent to server logs as referrer as easily)
     const q = new URLSearchParams({
       token: result.token,
       name: result.user.name || "",
@@ -349,12 +341,16 @@ router.post("/projects/:id/review", (req, res) => {
 });
 
 router.get("/status", (req, res) => {
-  let llm = false;
-  let checkpointer = "unknown";
+  let llmInfo = { enabled: false, provider: null, model: null };
+  let checkpointer = "memory";
   let pricingLive = false;
   let liveProviders = [];
-  try { llm = require("./llm").isLLMEnabled(); } catch (_) {}
-  try { checkpointer = require("./checkpointer").createCheckpointer().type; } catch (_) { checkpointer = "memory"; }
+  try {
+    llmInfo = require("./llm").getLLMInfo();
+  } catch (_) {}
+  try {
+    checkpointer = require("./checkpointer").createCheckpointer().type;
+  } catch (_) {}
   try {
     const pricing = require("./pricing");
     pricingLive = pricing.isLivePricingEnabled();
@@ -363,10 +359,11 @@ router.get("/status", (req, res) => {
 
   res.json({
     success: true,
-    version: "1.9",
+    version: "1.9.1",
     foundation: "complete",
     orchestrator: "langgraph",
-    llm_enabled: llm,
+    llm_enabled: llmInfo.enabled,
+    llm: llmInfo,
     pricing: {
       mode: pricingLive ? "live" : "mock",
       providers: liveProviders
@@ -382,7 +379,6 @@ router.get("/status", (req, res) => {
     checkpointer,
     endpoints: {
       google: "GET /api/agents/auth/google",
-      google_callback: "GET /api/agents/auth/google/callback",
       run: "POST /api/agents/run",
       status: "GET /api/agents/status",
       ui: "/agents.html"
