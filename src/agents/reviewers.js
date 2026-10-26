@@ -1,7 +1,7 @@
 /**
- * AI Expert Reviewer Agents (v1.6)
- * Rule-based reviewers + optional LLM overall review.
- * Improved revision targeting.
+ * AI Expert Reviewer Agents (v1.9.2)
+ * - Latest review pass only (clears previous pass)
+ * - Power/MCU issues target architecture revision
  */
 
 const { addHistory, addReview } = require("./state");
@@ -28,10 +28,19 @@ function runSchematicReviewer(project) {
       status = "needs_changes";
       confidence -= 0.15;
     }
+    // Soft note only if architecture already moved off ESP32
     if (sch.issues?.length) {
-      issues.push(...sch.issues.map(i => `From schematic generation: ${i}`));
-      if (status === "approved") status = "needs_changes";
-      confidence -= 0.08 * sch.issues.length;
+      const filtered = sch.issues.filter(i => {
+        if (/ESP32.*wearable|consider nRF52/i.test(i) && project.architecture?.mcu_family === "nrf52") {
+          return false; // already fixed
+        }
+        return true;
+      });
+      if (filtered.length) {
+        issues.push(...filtered.map(i => `From schematic generation: ${i}`));
+        if (status === "approved") status = "needs_changes";
+        confidence -= 0.08 * filtered.length;
+      }
     }
     const hasGnd = sch.nets?.some(n => n.name === "GND");
     const hasPower = sch.nets?.some(n =>
@@ -208,7 +217,16 @@ async function runLLMReviewer(project) {
   };
 }
 
+function issuesSuggestNrf52(results) {
+  return results.some(r =>
+    (r.issues || []).some(i => /nRF52|nrf52|ESP32 may be thermally/i.test(i))
+  );
+}
+
 async function runReviewers(project) {
+  // Keep only the latest review pass
+  project.reviews = [];
+
   const results = [];
 
   let r = runSchematicReviewer(project);
@@ -235,17 +253,23 @@ async function runReviewers(project) {
 
   const needsRevision = results.some(x => x.status === "needs_changes" || x.status === "rejected");
 
-  // Improved revision targeting priority
   let revisionTarget = null;
+  const powerBad = results.find(x => x.name === "PowerThermalReviewer" && x.status !== "approved");
   const schematicBad = results.find(x => x.name === "SchematicReviewer" && x.status !== "approved");
   const layoutBad = results.find(x => x.name === "LayoutReviewer" && x.status !== "approved");
   const dfmBad = results.find(x => x.name === "DFMReviewer" && x.status !== "approved");
-  const powerBad = results.find(x => x.name === "PowerThermalReviewer" && x.status !== "approved");
   const llmBad = results.find(x => x.name === "LLMReviewer" && x.status !== "approved");
 
-  if (schematicBad) revisionTarget = "schematic";
+  // MCU / power issues → re-run architecture (highest impact)
+  if (powerBad && issuesSuggestNrf52(results) && project.architecture?.mcu_family === "esp32") {
+    revisionTarget = "architecture";
+    project._revision_hint = "prefer_nrf52";
+  } else if (powerBad && project.architecture?.mcu_family === "esp32") {
+    revisionTarget = "architecture";
+    project._revision_hint = "prefer_nrf52";
+  } else if (schematicBad) revisionTarget = "schematic";
   else if (layoutBad || dfmBad) revisionTarget = "pcb";
-  else if (powerBad) revisionTarget = "schematic"; // power issues often need schematic/BOM changes
+  else if (powerBad) revisionTarget = "architecture";
   else if (llmBad) revisionTarget = "pcb";
 
   const overallConfidence = results.reduce((s, x) => s + x.confidence, 0) / results.length;

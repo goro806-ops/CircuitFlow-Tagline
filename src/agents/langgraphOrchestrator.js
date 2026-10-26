@@ -1,6 +1,6 @@
 /**
- * LangGraph Orchestrator (v1.9.1)
- * Memory checkpointer + async Component/Reviewers LLM.
+ * LangGraph Orchestrator (v1.9.2)
+ * Architecture revision path: arch → component → schematic → pcb → review
  */
 
 const fs = require("fs");
@@ -139,6 +139,7 @@ async function reviewNode(state) {
 function shouldRevise(state) {
   if (!state.revisionTarget) return "risk";
   if ((state.revisionCount || 0) >= MAX_REVISIONS) return "risk";
+  if (state.revisionTarget === "architecture") return "revise_architecture";
   if (state.revisionTarget === "schematic") return "revise_schematic";
   if (state.revisionTarget === "pcb") return "revise_pcb";
   return "risk";
@@ -178,7 +179,6 @@ function escalationNode(state) {
 
 function finishNode(state) {
   const project = state.project;
-  // Only leave needs_human if escalation set it; otherwise mark completed
   if (project.status !== "needs_human") {
     project.status = "completed";
     addHistory(project, "Orchestrator", "pipeline_completed", {
@@ -228,16 +228,19 @@ function buildGraph(checkpointer = null) {
     .addEdge("enclosure", "review")
 
     .addConditionalEdges("review", shouldRevise, {
+      revise_architecture: "inc_revision",
       revise_schematic: "inc_revision",
       revise_pcb: "inc_revision",
       risk: "risk"
     })
 
     .addConditionalEdges("inc_revision", (state) => {
+      if (state.revisionTarget === "architecture") return "architecture";
       if (state.revisionTarget === "schematic") return "schematic";
       if (state.revisionTarget === "pcb") return "pcb";
       return "risk";
     }, {
+      architecture: "architecture",
       schematic: "schematic",
       pcb: "pcb",
       risk: "risk"
@@ -285,6 +288,8 @@ async function runPipeline(userPrompt, options = {}) {
   console.log("\n=== Pipeline finished ===");
   console.log(`Checkpointer: ${type}`);
   console.log(`Final status: ${finalState.project.status}`);
+  console.log(`MCU:          ${finalState.project.architecture?.mcu_family}`);
+  console.log(`PCB layers:   ${finalState.project.pcb?.layers}`);
   console.log(`Revisions:    ${finalState.revisionCount || 0}`);
 
   finalState.project._thread_id = threadId;

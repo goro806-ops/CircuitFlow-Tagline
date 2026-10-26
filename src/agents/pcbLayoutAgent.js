@@ -1,16 +1,6 @@
 /**
- * PCBLayoutAgent (v0)
- *
- * Produces a first-pass PCB layout representation from the
- * schematic + architecture + constraints.
- *
- * This version is still rule-based / heuristic:
- * - Estimates board size from form-factor and component count
- * - Places major components in simple regions
- * - Records layer count and basic DRC-style notes
- *
- * Later this will be replaced by real placement + routing logic
- * (and eventually a proper generative layout engine).
+ * PCBLayoutAgent (v1.9.2)
+ * Prefer 4 layers for wearables, BLE/RF, and modules.
  */
 
 const { addHistory } = require("./state");
@@ -22,12 +12,10 @@ function runPCBLayoutAgent(project) {
 
   const arch = project.architecture;
   const schematic = project.schematic;
-  const constraints = project.user_intent.parsed_constraints;
+  const constraints = project.user_intent.parsed_constraints || {};
   const components = schematic.components || [];
+  const bom = project.bom;
 
-  // -------------------------------------------------------
-  // Estimate board size
-  // -------------------------------------------------------
   let widthMm = 40;
   let heightMm = 30;
 
@@ -42,25 +30,33 @@ function runPCBLayoutAgent(project) {
     heightMm = 30;
   }
 
-  // Grow a bit with component count
   const extra = Math.max(0, components.length - 8) * 2.5;
   widthMm = Math.round(widthMm + extra * 0.6);
   heightMm = Math.round(heightMm + extra * 0.4);
 
-  // -------------------------------------------------------
-  // Layer count heuristic
-  // -------------------------------------------------------
+  // Layer count: RF / wearable / module → 4
   let layers = 2;
-  if (components.length > 15 || (constraints.sensors || []).length > 3) {
+  const hasModule = bom?.line_items?.some(i =>
+    (i.package || "").toLowerCase().includes("module")
+  );
+  const isRf =
+    constraints.wireless === "ble" ||
+    constraints.wireless === "wifi" ||
+    constraints.wireless === "lora" ||
+    arch.wireless === "ble" ||
+    arch.wireless === "wifi";
+
+  if (
+    constraints.form_factor === "wearable" ||
+    isRf ||
+    hasModule ||
+    components.length > 12 ||
+    (constraints.sensors || []).length > 3
+  ) {
     layers = 4;
   }
 
-  // -------------------------------------------------------
-  // Simple placement regions
-  // -------------------------------------------------------
   const placements = [];
-
-  // MCU near center
   const mcu = components.find(c => c.category === "MCU");
   if (mcu) {
     placements.push({
@@ -73,7 +69,6 @@ function runPCBLayoutAgent(project) {
     });
   }
 
-  // Power parts on one edge
   const powerParts = components.filter(c => c.category === "Power");
   powerParts.forEach((p, i) => {
     placements.push({
@@ -86,7 +81,6 @@ function runPCBLayoutAgent(project) {
     });
   });
 
-  // Sensors in another region
   const sensors = components.filter(c => c.category === "Sensor");
   sensors.forEach((s, i) => {
     placements.push({
@@ -99,14 +93,12 @@ function runPCBLayoutAgent(project) {
     });
   });
 
-  // Remaining components – rough grid
   const placedRefs = new Set(placements.map(p => p.ref));
   let gridX = 8;
   let gridY = 8;
   components.forEach(c => {
     if (placedRefs.has(c.ref)) return;
-    if (c.category === "Passive") return; // skip detailed passive placement for now
-
+    if (c.category === "Passive") return;
     placements.push({
       ref: c.ref,
       x_mm: gridX,
@@ -122,35 +114,22 @@ function runPCBLayoutAgent(project) {
     }
   });
 
-  // -------------------------------------------------------
-  // Basic issues / DRC-style notes
-  // -------------------------------------------------------
   const issues = [];
-  let confidence = 0.55;
+  let confidence = 0.62;
 
   if (constraints.form_factor === "wearable" && (widthMm > 32 || heightMm > 26)) {
     issues.push("Board may be large for a typical wearable form factor");
     confidence -= 0.05;
   }
-
-  if (layers === 2 && components.length > 12) {
-    issues.push("Dense design on 2 layers – consider 4 layers for better routing and SI");
-    confidence -= 0.04;
-  }
-
   if (sensors.length > 0 && !mcu) {
     issues.push("Sensors present but no MCU found for placement reference");
     confidence -= 0.1;
   }
-
   if (placements.length < 3) {
     issues.push("Very few components placed – layout is incomplete");
     confidence -= 0.1;
   }
 
-  // -------------------------------------------------------
-  // Build PCB object
-  // -------------------------------------------------------
   const pcb = {
     format: "circuitflow-pcb-v0",
     outline: {
@@ -163,10 +142,12 @@ function runPCBLayoutAgent(project) {
     issues,
     notes: [
       "First-pass heuristic layout only.",
-      "No real autorouting or advanced DRC yet.",
-      "Component positions are approximate and intended for early digital-twin visualization."
+      layers === 4
+        ? "4-layer stackup chosen for RF/wearable/module ground-plane quality."
+        : "2-layer stackup – consider 4 layers if adding RF or density.",
+      "Component positions are approximate."
     ],
-    confidence: Math.max(0.35, Math.min(confidence, 0.8))
+    confidence: Math.max(0.35, Math.min(confidence, 0.85))
   };
 
   project.pcb = pcb;
@@ -179,7 +160,7 @@ function runPCBLayoutAgent(project) {
     issue_count: issues.length
   });
 
-  const risk_level = issues.length >= 2 ? "medium" : (issues.length === 1 ? "medium" : "low");
+  const risk_level = issues.length >= 2 ? "medium" : issues.length === 1 ? "medium" : "low";
 
   return {
     project,
