@@ -1,10 +1,10 @@
 {
   "name": "circuitflow-platform",
-  "version": "1.8.0",
+  "version": "1.9.1",
   "description": "CircuitFlow - Autonomous Electronics Design & Manufacturing SaaS Platform",
   "main": "server.js",
   "engines": {
-    "node": ">=18"
+    "node": "20.x"
   },
   "scripts": {
     "start": "node server.js",
@@ -19,8 +19,7 @@
     "cors": "^2.8.5",
     "archiver": "^7.0.1",
     "@langchain/langgraph": "^0.2.0",
-    "@langchain/core": "^0.3.0",
-    "@langchain/langgraph-checkpoint-sqlite": "^0.2.0"
+    "@langchain/core": "^0.3.0"
   },
   "devDependencies": {
     "jest": "^29.7.0"

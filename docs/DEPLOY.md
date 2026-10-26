@@ -1,86 +1,48 @@
-# Deploy CircuitFlow (phone-friendly)
+# Deploy CircuitFlow on Render
 
-You cannot use `localhost` on your phone. Deploy once → open a public URL.
+## Fix for the better-sqlite3 / Node 26 build error
 
-## Recommendation: **Render.com** (what you already used)
+We removed the native SQLite checkpointer dependency and pinned **Node 20**.
+LangGraph uses in-memory checkpoints; projects still save as JSON.
 
-Good fit for this Node app:
-- Free web service tier
-- Connects directly to GitHub
-- HTTPS URL that works on phone
-- Simple env vars for API keys
+## Deploy settings
 
-**Alternatives (also fine):**
-| Host | Notes |
-|------|--------|
-| **Render** | Best default if you already know it |
-| **Railway** | Easy, good free trial |
-| **Fly.io** | More control, slightly more setup |
-| **Vercel** | Less ideal (this is a long-running Node server, not only serverless) |
-
-Stay on **Render** unless you hit limits.
-
----
-
-## Deploy on Render (from phone or desktop)
-
-### 1. Open Render
-https://dashboard.render.com
-
-### 2. New → Web Service
-- Connect GitHub account if needed
-- Select repo: **goro806-ops/CircuitFlow-Tagline**
-- Branch: **main**
-
-### 3. Settings
 | Field | Value |
 |-------|--------|
 | Runtime | Node |
-| Build command | `npm install` |
-| Start command | `node server.js` |
-| Instance | Free |
+| **Node version** | **20** (important — not 26) |
+| Build | `npm install --omit=dev` |
+| Start | `node server.js` |
+| Health check | `/health` |
 
-### 4. Environment (optional)
-In Render → Environment:
+In Render: **Settings → Environment → Node Version → 20**
+
+Or set env var:
 
 ```
-HOST=0.0.0.0
-OPENAI_API_KEY=sk-...          # optional, smarter agents
-MOUSER_API_KEY=...             # optional live pricing
-DIGIKEY_CLIENT_ID=...
-DIGIKEY_CLIENT_SECRET=...
-NEXAR_TOKEN=...                # Octopart
+NODE_VERSION=20
 ```
 
-`PORT` is set automatically by Render — do not hardcode it.
+## Environment variables (recommended)
 
-### 5. Create Web Service
-Wait for deploy (a few minutes). You get a URL like:
+| Key | Purpose |
+|-----|---------|
+| `ANTHROPIC_API_KEY` | **Claude** LLM (your choice) |
+| `ANTHROPIC_MODEL` | optional, default `claude-sonnet-4-20250514` |
+| `OPENAI_API_KEY` | optional fallback |
+| `GOOGLE_CLIENT_ID` | Google sign-in |
+| `GOOGLE_CLIENT_SECRET` | Google sign-in |
+| `BASE_URL` | `https://YOUR-APP.onrender.com` |
+| `HOST` | `0.0.0.0` |
 
-`https://circuitflow-xxxx.onrender.com`
-
-### 6. On your phone open
-
-| Page | URL |
-|------|-----|
-| **Agents UI** | `https://YOUR-APP.onrender.com/agents.html` |
-| Health | `https://YOUR-APP.onrender.com/health` |
-| Status API | `https://YOUR-APP.onrender.com/api/agents/status` |
-
----
-
-## Important (free tier)
-
-1. **Cold start** – free services sleep after ~15 min idle. First open can take 30–60 seconds.
-2. **Disk is ephemeral** – projects saved under `data/` may be lost on restart. Fine for demos; later use a database.
-3. **Secrets** – put API keys only in Render Environment, never in the repo.
-
----
+Claude is preferred automatically when `ANTHROPIC_API_KEY` is set.
 
 ## After deploy
 
-1. Open `/agents.html` on your phone  
-2. Run a prompt (e.g. BLE wearable with IMU under $15)  
-3. Check `/api/agents/status` for version **1.8**
+1. Open `https://YOUR-APP.onrender.com/health`
+2. Open `https://YOUR-APP.onrender.com/agents.html`
+3. Check `https://YOUR-APP.onrender.com/api/agents/status` — should show version and `llm` provider
 
-If deploy fails, check Render **Logs** for the error and share it.
+## Redeploy
+
+After pulling these fixes from GitHub, click **Manual Deploy → Deploy latest commit** on Render.
