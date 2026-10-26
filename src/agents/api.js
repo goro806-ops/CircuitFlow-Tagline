@@ -1,5 +1,5 @@
 /**
- * Multi-agent HTTP API – /api/agents  (v1.9.1)
+ * Multi-agent HTTP API – /api/agents  (v1.9.2)
  */
 
 const express = require("express");
@@ -140,6 +140,38 @@ router.get("/auth/google/status", (req, res) => {
     redirect_uri_hint: getGoogleRedirectUri(req),
     start_url: "/api/agents/auth/google"
   });
+});
+
+/** Live LLM smoke test – open on phone to see real provider errors */
+router.get("/llm/test", async (req, res) => {
+  try {
+    const { getLLMInfo, callLLM } = require("./llm");
+    const info = getLLMInfo();
+    if (!info.enabled) {
+      return res.json({
+        success: false,
+        error: "No LLM provider configured",
+        llm: info
+      });
+    }
+
+    const text = await callLLM(
+      "You are a test assistant. Reply with ONLY valid JSON.",
+      'Return exactly: {"ok": true, "provider_check": "pass"}',
+      { json: true, temperature: 0 }
+    );
+
+    res.json({
+      success: Boolean(text),
+      llm: info,
+      raw_response: text,
+      message: text
+        ? "LLM call succeeded – pipeline can use this provider"
+        : "LLM call returned empty – check Render logs for [LLM] error lines"
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 router.post("/run", async (req, res) => {
@@ -359,7 +391,7 @@ router.get("/status", (req, res) => {
 
   res.json({
     success: true,
-    version: "1.9.1",
+    version: "1.9.2",
     foundation: "complete",
     orchestrator: "langgraph",
     llm_enabled: llmInfo.enabled,
@@ -381,6 +413,7 @@ router.get("/status", (req, res) => {
       google: "GET /api/agents/auth/google",
       run: "POST /api/agents/run",
       status: "GET /api/agents/status",
+      llm_test: "GET /api/agents/llm/test",
       ui: "/agents.html"
     }
   });
