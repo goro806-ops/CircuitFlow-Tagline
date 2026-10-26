@@ -1,13 +1,11 @@
 /**
  * Optional LLM helper for CircuitFlow agents.
  *
- * Providers (auto-pick order unless LLM_PROVIDER is set):
- *   1. Groq     – GROQ_API_KEY     (often has free tier)
+ * Providers (auto-pick unless LLM_PROVIDER is set — only ONE LLM_PROVIDER key on Render):
+ *   1. Groq     – GROQ_API_KEY
  *   2. xAI Grok – XAI_API_KEY / GROK_API_KEY
- *   3. Anthropic Claude – ANTHROPIC_API_KEY
+ *   3. Anthropic – ANTHROPIC_API_KEY
  *   4. OpenAI   – OPENAI_API_KEY
- *
- * Force one: LLM_PROVIDER=groq|xai|anthropic|openai
  */
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
@@ -32,7 +30,6 @@ function getProvider() {
   if (forced === "anthropic" || forced === "claude") return ANTHROPIC_API_KEY ? "anthropic" : null;
   if (forced === "openai") return OPENAI_API_KEY ? "openai" : null;
 
-  // Prefer free/cheap-friendly providers first when keys exist
   if (GROQ_API_KEY) return "groq";
   if (XAI_API_KEY) return "xai";
   if (ANTHROPIC_API_KEY) return "anthropic";
@@ -55,7 +52,13 @@ function getLLMInfo() {
   return {
     enabled: Boolean(provider),
     provider: provider || null,
-    model: provider ? models[provider] : null
+    model: provider ? models[provider] : null,
+    keys_present: {
+      groq: Boolean(GROQ_API_KEY),
+      xai: Boolean(XAI_API_KEY),
+      anthropic: Boolean(ANTHROPIC_API_KEY),
+      openai: Boolean(OPENAI_API_KEY)
+    }
   };
 }
 
@@ -87,49 +90,70 @@ async function callAnthropic(systemPrompt, userPrompt, options = {}) {
   return block?.text || null;
 }
 
-/** OpenAI-compatible chat completions (OpenAI, Groq, xAI) */
 async function callOpenAICompatible(baseUrl, apiKey, defaultModel, systemPrompt, userPrompt, options = {}) {
-  const body = {
-    model: options.model || defaultModel,
-    temperature: options.temperature ?? 0.2,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ]
+  const model = options.model || defaultModel;
+  const makeBody = (withJsonFormat) => {
+    const body = {
+      model,
+      temperature: options.temperature ?? 0.2,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ]
+    };
+    if (withJsonFormat && options.json) {
+      body.response_format = { type: "json_object" };
+    }
+    return body;
   };
-  if (options.json) {
-    // Groq / xAI may ignore this; system prompt still asks for JSON
-    body.response_format = { type: "json_object" };
+
+  const attempts = options.json ? [true, false] : [false];
+
+  for (const withJson of attempts) {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(makeBody(withJson))
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.warn(
+        `[LLM] error ${baseUrl} (${withJson ? "json_mode" : "plain"}):`,
+        response.status,
+        text.slice(0, 350)
+      );
+      if (withJson) continue;
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || null;
+    if (content) {
+      console.log(`[LLM] OK provider-api=${baseUrl} model=${model} chars=${content.length}`);
+      return content;
+    }
   }
-
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(body)
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    console.warn("[LLM] API error:", baseUrl, response.status, text.slice(0, 300));
-    return null;
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || null;
+  return null;
 }
 
 async function callLLM(systemPrompt, userPrompt, options = {}) {
   const provider = getProvider();
-  if (!provider) return null;
+  if (!provider) {
+    console.warn("[LLM] no provider configured");
+    return null;
+  }
 
   let system = systemPrompt;
   if (options.json) {
     system +=
       "\n\nIMPORTANT: Respond with ONLY valid JSON. No markdown fences, no commentary.";
   }
+
+  console.log(`[LLM] using provider=${provider}`);
 
   try {
     if (provider === "anthropic") {
