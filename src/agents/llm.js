@@ -1,17 +1,20 @@
 /**
  * Optional LLM helper for CircuitFlow agents.
  *
- * Supports:
- *   - Anthropic Claude  (preferred if ANTHROPIC_API_KEY is set)
- *   - OpenAI           (OPENAI_API_KEY)
+ * Providers (auto-pick order unless LLM_PROVIDER is set):
+ *   1. Groq     – GROQ_API_KEY     (often has free tier)
+ *   2. xAI Grok – XAI_API_KEY / GROK_API_KEY
+ *   3. Anthropic Claude – ANTHROPIC_API_KEY
+ *   4. OpenAI   – OPENAI_API_KEY
  *
- * Env:
- *   ANTHROPIC_API_KEY / CLAUDE_API_KEY
- *   ANTHROPIC_MODEL   (default: claude-sonnet-4-20250514)
- *   OPENAI_API_KEY
- *   OPENAI_MODEL      (default: gpt-4o-mini)
- *   LLM_PROVIDER      force "anthropic" | "openai" (optional)
+ * Force one: LLM_PROVIDER=groq|xai|anthropic|openai
  */
+
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+
+const XAI_API_KEY = process.env.XAI_API_KEY || process.env.GROK_API_KEY || "";
+const XAI_MODEL = process.env.XAI_MODEL || process.env.GROK_MODEL || "grok-2-latest";
 
 const ANTHROPIC_API_KEY =
   process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || "";
@@ -23,10 +26,15 @@ const OPENAI_API_KEY =
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 function getProvider() {
-  const forced = (process.env.LLM_PROVIDER || "").toLowerCase();
+  const forced = (process.env.LLM_PROVIDER || "").toLowerCase().trim();
+  if (forced === "groq") return GROQ_API_KEY ? "groq" : null;
+  if (forced === "xai" || forced === "grok") return XAI_API_KEY ? "xai" : null;
   if (forced === "anthropic" || forced === "claude") return ANTHROPIC_API_KEY ? "anthropic" : null;
   if (forced === "openai") return OPENAI_API_KEY ? "openai" : null;
-  // Prefer Claude when both are set (user choice)
+
+  // Prefer free/cheap-friendly providers first when keys exist
+  if (GROQ_API_KEY) return "groq";
+  if (XAI_API_KEY) return "xai";
   if (ANTHROPIC_API_KEY) return "anthropic";
   if (OPENAI_API_KEY) return "openai";
   return null;
@@ -38,15 +46,16 @@ function isLLMEnabled() {
 
 function getLLMInfo() {
   const provider = getProvider();
+  const models = {
+    groq: GROQ_MODEL,
+    xai: XAI_MODEL,
+    anthropic: ANTHROPIC_MODEL,
+    openai: OPENAI_MODEL
+  };
   return {
     enabled: Boolean(provider),
     provider: provider || null,
-    model:
-      provider === "anthropic"
-        ? ANTHROPIC_MODEL
-        : provider === "openai"
-          ? OPENAI_MODEL
-          : null
+    model: provider ? models[provider] : null
   };
 }
 
@@ -78,9 +87,10 @@ async function callAnthropic(systemPrompt, userPrompt, options = {}) {
   return block?.text || null;
 }
 
-async function callOpenAI(systemPrompt, userPrompt, options = {}) {
+/** OpenAI-compatible chat completions (OpenAI, Groq, xAI) */
+async function callOpenAICompatible(baseUrl, apiKey, defaultModel, systemPrompt, userPrompt, options = {}) {
   const body = {
-    model: options.model || OPENAI_MODEL,
+    model: options.model || defaultModel,
     temperature: options.temperature ?? 0.2,
     messages: [
       { role: "system", content: systemPrompt },
@@ -88,21 +98,22 @@ async function callOpenAI(systemPrompt, userPrompt, options = {}) {
     ]
   };
   if (options.json) {
+    // Groq / xAI may ignore this; system prompt still asks for JSON
     body.response_format = { type: "json_object" };
   }
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`
+      Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify(body)
   });
 
   if (!response.ok) {
     const text = await response.text();
-    console.warn("[LLM] OpenAI error:", response.status, text.slice(0, 200));
+    console.warn("[LLM] API error:", baseUrl, response.status, text.slice(0, 300));
     return null;
   }
 
@@ -114,16 +125,47 @@ async function callLLM(systemPrompt, userPrompt, options = {}) {
   const provider = getProvider();
   if (!provider) return null;
 
+  let system = systemPrompt;
+  if (options.json) {
+    system +=
+      "\n\nIMPORTANT: Respond with ONLY valid JSON. No markdown fences, no commentary.";
+  }
+
   try {
     if (provider === "anthropic") {
-      let system = systemPrompt;
-      if (options.json) {
-        system +=
-          "\n\nIMPORTANT: Respond with ONLY valid JSON. No markdown fences, no commentary.";
-      }
       return await callAnthropic(system, userPrompt, options);
     }
-    return await callOpenAI(systemPrompt, userPrompt, options);
+    if (provider === "groq") {
+      return await callOpenAICompatible(
+        "https://api.groq.com/openai/v1",
+        GROQ_API_KEY,
+        GROQ_MODEL,
+        system,
+        userPrompt,
+        options
+      );
+    }
+    if (provider === "xai") {
+      return await callOpenAICompatible(
+        "https://api.x.ai/v1",
+        XAI_API_KEY,
+        XAI_MODEL,
+        system,
+        userPrompt,
+        options
+      );
+    }
+    if (provider === "openai") {
+      return await callOpenAICompatible(
+        "https://api.openai.com/v1",
+        OPENAI_API_KEY,
+        OPENAI_MODEL,
+        system,
+        userPrompt,
+        options
+      );
+    }
+    return null;
   } catch (err) {
     console.warn("[LLM] call failed:", err.message);
     return null;
@@ -135,7 +177,6 @@ function parseJsonLoose(content) {
   try {
     return JSON.parse(content);
   } catch {
-    // strip markdown fences if model added them
     const m = content.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (m) {
       try {
