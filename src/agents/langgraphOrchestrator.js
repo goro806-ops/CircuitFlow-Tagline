@@ -1,6 +1,6 @@
 /**
- * LangGraph Orchestrator (v1.5)
- * Durable checkpoints (Sqlite when available) + async Component/Reviewers LLM.
+ * LangGraph Orchestrator (v1.9.1)
+ * Memory checkpointer + async Component/Reviewers LLM.
  */
 
 const fs = require("fs");
@@ -178,16 +178,17 @@ function escalationNode(state) {
 
 function finishNode(state) {
   const project = state.project;
+  // Only leave needs_human if escalation set it; otherwise mark completed
   if (project.status !== "needs_human") {
-    project.status = "in_progress";
-    addHistory(project, "Orchestrator", "auto_approved_for_now", {
+    project.status = "completed";
+    addHistory(project, "Orchestrator", "pipeline_completed", {
       overall_confidence: state.aggregation?.overall_confidence,
       overall_risk: state.aggregation?.overall_risk,
       revisions: state.revisionCount || 0
     });
   }
 
-  addHistory(project, "Orchestrator", "pipeline_complete_langgraph_v1.5", {
+  addHistory(project, "Orchestrator", "pipeline_complete_langgraph", {
     agents_run: (state.agentResults || []).map(r => r.agent),
     overall_confidence: state.aggregation?.overall_confidence,
     overall_risk: state.aggregation?.overall_risk,
@@ -256,7 +257,7 @@ function buildGraph(checkpointer = null) {
 async function runPipeline(userPrompt, options = {}) {
   const threadId = options.threadId || `thread_${Date.now().toString(36)}`;
 
-  console.log("\n=== CircuitFlow LangGraph Orchestrator (v1.5) ===");
+  console.log("\n=== CircuitFlow LangGraph Orchestrator ===");
   console.log(`User prompt: "${userPrompt}"`);
   console.log(`Thread ID:   ${threadId}\n`);
 
@@ -281,14 +282,10 @@ async function runPipeline(userPrompt, options = {}) {
   console.log("\n--- Agent Log ---");
   (finalState.logs || []).forEach(line => console.log(line));
 
-  console.log("\n=== Pipeline finished (LangGraph v1.5) ===");
+  console.log("\n=== Pipeline finished ===");
   console.log(`Checkpointer: ${type}`);
   console.log(`Final status: ${finalState.project.status}`);
   console.log(`Revisions:    ${finalState.revisionCount || 0}`);
-  console.log(`History:      ${finalState.project.history.length} entries`);
-  if (finalState.project.escalation) {
-    console.log(`Escalation:   ${finalState.project.escalation.status}`);
-  }
 
   finalState.project._thread_id = threadId;
   finalState.project._checkpointer = type;
