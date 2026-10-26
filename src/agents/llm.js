@@ -1,15 +1,12 @@
 /**
- * Optional LLM helper for CircuitFlow agents.
- *
- * Providers (auto-pick unless LLM_PROVIDER is set — only ONE LLM_PROVIDER key on Render):
- *   1. Groq     – GROQ_API_KEY
- *   2. xAI Grok – XAI_API_KEY / GROK_API_KEY
- *   3. Anthropic – ANTHROPIC_API_KEY
- *   4. OpenAI   – OPENAI_API_KEY
+ * Optional LLM helper for CircuitFlow agents (v1.9.3)
+ * - Groq / xAI / Anthropic / OpenAI
+ * - Retry on 429 with backoff
+ * - Default Groq model: llama-3.1-8b-instant (widely available)
  */
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
-const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
 
 const XAI_API_KEY = process.env.XAI_API_KEY || process.env.GROK_API_KEY || "";
 const XAI_MODEL = process.env.XAI_MODEL || process.env.GROK_MODEL || "grok-2-latest";
@@ -22,6 +19,20 @@ const ANTHROPIC_MODEL =
 const OPENAI_API_KEY =
   process.env.OPENAI_API_KEY || process.env.CIRCUITFLOW_OPENAI_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+const MAX_429_RETRIES = 3;
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterMs(status, bodyText) {
+  // Groq often says "try again in 5.88s"
+  const m = String(bodyText || "").match(/try again in ([\d.]+)\s*s/i);
+  if (m) return Math.ceil(parseFloat(m[1]) * 1000) + 200;
+  if (status === 429) return 6000;
+  return 0;
+}
 
 function getProvider() {
   const forced = (process.env.LLM_PROVIDER || "").toLowerCase().trim();
@@ -63,31 +74,40 @@ function getLLMInfo() {
 }
 
 async function callAnthropic(systemPrompt, userPrompt, options = {}) {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: options.model || ANTHROPIC_MODEL,
-      max_tokens: options.max_tokens || 2048,
-      temperature: options.temperature ?? 0.2,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }]
-    })
-  });
+  for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: options.model || ANTHROPIC_MODEL,
+        max_tokens: options.max_tokens || 2048,
+        temperature: options.temperature ?? 0.2,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }]
+      })
+    });
 
-  if (!response.ok) {
+    if (response.ok) {
+      const data = await response.json();
+      const block = (data.content || []).find(b => b.type === "text");
+      return block?.text || null;
+    }
+
     const text = await response.text();
+    if (response.status === 429 && attempt < MAX_429_RETRIES) {
+      const wait = parseRetryAfterMs(429, text);
+      console.warn(`[LLM] Anthropic 429 – retry in ${wait}ms (attempt ${attempt + 1})`);
+      await sleep(wait);
+      continue;
+    }
     console.warn("[LLM] Anthropic error:", response.status, text.slice(0, 300));
     return null;
   }
-
-  const data = await response.json();
-  const block = (data.content || []).find(b => b.type === "text");
-  return block?.text || null;
+  return null;
 }
 
 async function callOpenAICompatible(baseUrl, apiKey, defaultModel, systemPrompt, userPrompt, options = {}) {
@@ -96,6 +116,7 @@ async function callOpenAICompatible(baseUrl, apiKey, defaultModel, systemPrompt,
     const body = {
       model,
       temperature: options.temperature ?? 0.2,
+      max_tokens: options.max_tokens || 1024,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
@@ -107,35 +128,50 @@ async function callOpenAICompatible(baseUrl, apiKey, defaultModel, systemPrompt,
     return body;
   };
 
-  const attempts = options.json ? [true, false] : [false];
+  // Outer: 429 retries; inner: json_mode then plain
+  for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
+    const formatAttempts = options.json ? [true, false] : [false];
+    let lastStatus = 0;
+    let lastText = "";
 
-  for (const withJson of attempts) {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(makeBody(withJson))
-    });
+    for (const withJson of formatAttempts) {
+      const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(makeBody(withJson))
+      });
 
-    if (!response.ok) {
-      const text = await response.text();
-      console.warn(
-        `[LLM] error ${baseUrl} (${withJson ? "json_mode" : "plain"}):`,
-        response.status,
-        text.slice(0, 350)
-      );
-      if (withJson) continue;
-      return null;
+      lastStatus = response.status;
+      if (!response.ok) {
+        lastText = await response.text();
+        console.warn(
+          `[LLM] error ${baseUrl} (${withJson ? "json_mode" : "plain"}):`,
+          response.status,
+          lastText.slice(0, 350)
+        );
+        if (response.status === 429) break; // go to retry sleep
+        if (withJson) continue;
+        return null;
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || null;
+      if (content) {
+        console.log(`[LLM] OK provider-api=${baseUrl} model=${model} chars=${content.length}`);
+        return content;
+      }
     }
 
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || null;
-    if (content) {
-      console.log(`[LLM] OK provider-api=${baseUrl} model=${model} chars=${content.length}`);
-      return content;
+    if (lastStatus === 429 && attempt < MAX_429_RETRIES) {
+      const wait = parseRetryAfterMs(429, lastText);
+      console.warn(`[LLM] 429 – retry in ${wait}ms (attempt ${attempt + 1}/${MAX_429_RETRIES})`);
+      await sleep(wait);
+      continue;
     }
+    return null;
   }
   return null;
 }
@@ -224,14 +260,21 @@ Return ONLY valid JSON with these fields (use null when unknown):
   "sensors": string[],
   "mcu_preference": "esp32" | "nrf52" | "stm32" | "rp2040" | null,
   "notes": string
-}`;
+}
+For sensors use short keys only: imu, temperature, humidity, pressure, heart_rate, gps, microphone, camera.`;
 
   const content = await callLLM(system, rawText, { json: true, temperature: 0.1 });
   return parseJsonLoose(content);
 }
 
 async function llmSuggestBom(architecture, constraints) {
+  const target = constraints?.target_cost;
+  const budgetHint = target
+    ? `Hard budget: total BOM must stay under about $${target}. Prefer fewer, cheaper parts.`
+    : "Prefer commonly available low-cost parts.";
+
   const system = `You are a hardware sourcing engineer. Suggest a concise BOM for the given architecture.
+${budgetHint}
 Return ONLY valid JSON:
 {
   "items": [
@@ -239,10 +282,10 @@ Return ONLY valid JSON:
   ],
   "notes": string
 }
-Prefer commonly available parts. Keep the list under 12 items.`;
+Keep the list under 8 items. Do not duplicate the main MCU/sensor if already obvious from architecture.`;
 
   const user = JSON.stringify({ architecture, constraints }, null, 2);
-  const content = await callLLM(system, user, { json: true, temperature: 0.2 });
+  const content = await callLLM(system, user, { json: true, temperature: 0.2, max_tokens: 900 });
   return parseJsonLoose(content);
 }
 
@@ -259,7 +302,8 @@ Be practical and brief. If the design looks reasonable for an early prototype, a
 
   const content = await callLLM(system, JSON.stringify(snapshot, null, 2), {
     json: true,
-    temperature: 0.15
+    temperature: 0.15,
+    max_tokens: 600
   });
   return parseJsonLoose(content);
 }

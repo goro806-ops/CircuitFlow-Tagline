@@ -1,11 +1,46 @@
 /**
- * SpecAgent
- * Parses the user's natural language request into structured constraints.
- * Uses LLM when OPENAI_API_KEY is available, otherwise falls back to rules.
+ * SpecAgent (v1.9.3)
+ * Parses user request into structured constraints.
+ * Normalizes sensor names from LLM free-text to library keys.
  */
 
 const { addHistory } = require("./state");
 const { isLLMEnabled, llmExtractConstraints } = require("./llm");
+
+const SENSOR_ALIASES = [
+  { key: "imu", patterns: [/imu/i, /6[- ]?axis/i, /9[- ]?axis/i, /accel/i, /gyro/i, /bmi\d+/i] },
+  { key: "temperature", patterns: [/temp/i, /tmp\d+/i] },
+  { key: "humidity", patterns: [/humid/i, /sht\d+/i] },
+  { key: "pressure", patterns: [/pressure/i, /barometer/i, /bmp\d+/i] },
+  { key: "heart_rate", patterns: [/heart\s*rate/i, /\bppg\b/i, /\bhr\b/i, /max3010/i, /pulse\s*ox/i] },
+  { key: "gps", patterns: [/\bgps\b/i, /gnss/i, /u-?blox/i] },
+  { key: "microphone", patterns: [/microphone/i, /\bmic\b/i] },
+  { key: "camera", patterns: [/camera/i, /cmos\s*image/i] }
+];
+
+function normalizeSensorName(raw) {
+  if (!raw || typeof raw !== "string") return null;
+  const s = raw.trim();
+  if (!s) return null;
+  const lower = s.toLowerCase().replace(/\s+/g, "_");
+  // already a known key
+  if (SENSOR_ALIASES.some(a => a.key === lower)) return lower;
+  for (const { key, patterns } of SENSOR_ALIASES) {
+    if (patterns.some(p => p.test(s))) return key;
+  }
+  // unknown – keep a safe slug (max 24 chars)
+  return lower.replace(/[^a-z0-9_]/g, "_").slice(0, 24) || null;
+}
+
+function normalizeSensors(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  list.forEach(item => {
+    const key = normalizeSensorName(item);
+    if (key && !out.includes(key)) out.push(key);
+  });
+  return out;
+}
 
 function ruleBasedParse(text) {
   const lower = (text || "").toLowerCase();
@@ -41,19 +76,8 @@ function ruleBasedParse(text) {
   else if (lower.includes("lora") || lower.includes("lorawan")) constraints.wireless = "lora";
   else if (lower.includes("cellular") || lower.includes("lte") || lower.includes("nbiot")) constraints.wireless = "cellular";
 
-  const sensorKeywords = [
-    { key: "imu", words: ["imu", "accelerometer", "gyro", "6-axis", "9-axis"] },
-    { key: "temperature", words: ["temperature", "temp sensor"] },
-    { key: "humidity", words: ["humidity"] },
-    { key: "pressure", words: ["pressure", "barometer"] },
-    { key: "heart_rate", words: ["heart rate", "ppg", "hr"] },
-    { key: "gps", words: ["gps", "gnss"] },
-    { key: "microphone", words: ["microphone", "mic"] },
-    { key: "camera", words: ["camera"] }
-  ];
-
-  sensorKeywords.forEach(({ key, words }) => {
-    if (words.some(w => lower.includes(w)) && !constraints.sensors.includes(key)) {
+  SENSOR_ALIASES.forEach(({ key, patterns }) => {
+    if (patterns.some(p => p.test(lower)) && !constraints.sensors.includes(key)) {
       constraints.sensors.push(key);
     }
   });
@@ -75,12 +99,17 @@ async function runSpecAgent(project) {
   if (isLLMEnabled()) {
     const llmResult = await llmExtractConstraints(raw);
     if (llmResult && typeof llmResult === "object") {
+      const llmSensors = normalizeSensors(llmResult.sensors);
+      const ruleSensors = constraints.sensors || [];
+      // Prefer normalized union so rule keywords aren't lost
+      const sensors = [...new Set([...llmSensors, ...ruleSensors])];
+
       constraints = {
         target_cost: llmResult.target_cost ?? constraints.target_cost,
         form_factor: llmResult.form_factor ?? constraints.form_factor,
         power: llmResult.power ?? constraints.power,
         wireless: llmResult.wireless ?? constraints.wireless,
-        sensors: Array.isArray(llmResult.sensors) ? llmResult.sensors : constraints.sensors,
+        sensors,
         mcu_preference: llmResult.mcu_preference ?? constraints.mcu_preference,
         other: { notes: llmResult.notes || null }
       };
@@ -88,7 +117,6 @@ async function runSpecAgent(project) {
       confidence = 0.82;
     }
   } else {
-    // Rule-based confidence based on how much we extracted
     let extracted = 0;
     if (constraints.target_cost) extracted++;
     if (constraints.form_factor) extracted++;
@@ -99,11 +127,15 @@ async function runSpecAgent(project) {
     confidence = Math.min(0.55 + extracted * 0.08, 0.92);
   }
 
+  // Always normalize final sensor list
+  constraints.sensors = normalizeSensors(constraints.sensors);
+
   project.user_intent.parsed_constraints = constraints;
 
   addHistory(project, "SpecAgent", "parsed_constraints", {
     source,
-    confidence
+    confidence,
+    sensors: constraints.sensors
   });
 
   return {
@@ -114,4 +146,4 @@ async function runSpecAgent(project) {
   };
 }
 
-module.exports = { runSpecAgent };
+module.exports = { runSpecAgent, normalizeSensorName, normalizeSensors };

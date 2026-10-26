@@ -1,6 +1,7 @@
 /**
- * PCBLayoutAgent (v1.9.2)
- * Prefer 4 layers for wearables, BLE/RF, and modules.
+ * PCBLayoutAgent (v1.9.3)
+ * - 4 layers for wearables / RF / modules
+ * - Wearable size bias: denser pack, hard max outline
  */
 
 const { addHistory } = require("./state");
@@ -15,11 +16,12 @@ function runPCBLayoutAgent(project) {
   const constraints = project.user_intent.parsed_constraints || {};
   const components = schematic.components || [];
   const bom = project.bom;
+  const isWearable = constraints.form_factor === "wearable";
 
   let widthMm = 40;
   let heightMm = 30;
 
-  if (constraints.form_factor === "wearable") {
+  if (isWearable) {
     widthMm = 28;
     heightMm = 22;
   } else if (constraints.form_factor === "handheld") {
@@ -30,11 +32,18 @@ function runPCBLayoutAgent(project) {
     heightMm = 30;
   }
 
-  const extra = Math.max(0, components.length - 8) * 2.5;
-  widthMm = Math.round(widthMm + extra * 0.6);
-  heightMm = Math.round(heightMm + extra * 0.4);
+  // Growth with component count – weaker for wearables (denser)
+  const over = Math.max(0, components.length - (isWearable ? 10 : 8));
+  const growth = isWearable ? 1.2 : 2.5;
+  widthMm = Math.round(widthMm + over * growth * 0.55);
+  heightMm = Math.round(heightMm + over * growth * 0.4);
 
-  // Layer count: RF / wearable / module → 4
+  // Hard caps for wearables so LLM-bloated BOMs don't explode outline
+  if (isWearable) {
+    widthMm = Math.min(widthMm, 36);
+    heightMm = Math.min(heightMm, 28);
+  }
+
   let layers = 2;
   const hasModule = bom?.line_items?.some(i =>
     (i.package || "").toLowerCase().includes("module")
@@ -47,7 +56,7 @@ function runPCBLayoutAgent(project) {
     arch.wireless === "wifi";
 
   if (
-    constraints.form_factor === "wearable" ||
+    isWearable ||
     isRf ||
     hasModule ||
     components.length > 12 ||
@@ -73,8 +82,8 @@ function runPCBLayoutAgent(project) {
   powerParts.forEach((p, i) => {
     placements.push({
       ref: p.ref,
-      x_mm: 5 + i * 8,
-      y_mm: heightMm - 6,
+      x_mm: Math.min(5 + i * 7, widthMm - 4),
+      y_mm: heightMm - 5,
       rotation: 0,
       side: "top",
       notes: "Power region"
@@ -85,8 +94,8 @@ function runPCBLayoutAgent(project) {
   sensors.forEach((s, i) => {
     placements.push({
       ref: s.ref,
-      x_mm: widthMm - 10,
-      y_mm: 8 + i * 7,
+      x_mm: Math.max(4, widthMm - 9),
+      y_mm: Math.min(7 + i * 6, heightMm - 4),
       rotation: 0,
       side: "top",
       notes: "Sensor region"
@@ -94,8 +103,9 @@ function runPCBLayoutAgent(project) {
   });
 
   const placedRefs = new Set(placements.map(p => p.ref));
-  let gridX = 8;
-  let gridY = 8;
+  let gridX = 6;
+  let gridY = 6;
+  const step = isWearable ? 7 : 10;
   components.forEach(c => {
     if (placedRefs.has(c.ref)) return;
     if (c.category === "Passive") return;
@@ -107,19 +117,20 @@ function runPCBLayoutAgent(project) {
       side: "top",
       notes: "Auto grid placement"
     });
-    gridX += 10;
-    if (gridX > widthMm - 8) {
-      gridX = 8;
-      gridY += 8;
+    gridX += step;
+    if (gridX > widthMm - 5) {
+      gridX = 6;
+      gridY += step;
     }
   });
 
   const issues = [];
   let confidence = 0.62;
 
-  if (constraints.form_factor === "wearable" && (widthMm > 32 || heightMm > 26)) {
+  // Softer wearable size warning (only if still over hard target after bias)
+  if (isWearable && (widthMm > 34 || heightMm > 27)) {
     issues.push("Board may be large for a typical wearable form factor");
-    confidence -= 0.05;
+    confidence -= 0.04;
   }
   if (sensors.length > 0 && !mcu) {
     issues.push("Sensors present but no MCU found for placement reference");
@@ -145,8 +156,9 @@ function runPCBLayoutAgent(project) {
       layers === 4
         ? "4-layer stackup chosen for RF/wearable/module ground-plane quality."
         : "2-layer stackup – consider 4 layers if adding RF or density.",
+      isWearable ? "Wearable size bias applied (max ~36×28 mm)." : null,
       "Component positions are approximate."
-    ],
+    ].filter(Boolean),
     confidence: Math.max(0.35, Math.min(confidence, 0.85))
   };
 
