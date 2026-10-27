@@ -64,7 +64,6 @@ function setBadge(text, kind) {
   statusBadge.className = "badge" + (kind ? " " + kind : "");
 }
 
-/** Handle return from Google OAuth */
 function handleOAuthReturn() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("auth_error")) {
@@ -94,7 +93,6 @@ async function loadStatus() {
           googleBtn.style.display = getToken() ? "none" : "inline-flex";
         } else {
           googleBtn.style.display = "none";
-          googleBtn.title = "Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET on server";
         }
       }
     } else setBadge("API error", "err");
@@ -113,7 +111,7 @@ function renderSummary(data) {
   const status = p.status || data.status || "unknown";
   const statusEl = $("resultStatus");
   statusEl.textContent = status;
-  statusEl.className = "badge " + (status === "needs_human" ? "warn" : "ok");
+  statusEl.className = "badge " + (status === "needs_human" ? "warn" : status === "failed" ? "err" : "ok");
 
   $("constraintsOut").textContent = JSON.stringify(s.constraints || p.user_intent?.parsed_constraints || {}, null, 2);
   $("archOut").textContent = JSON.stringify({
@@ -160,10 +158,15 @@ function renderSummary(data) {
   const exportLink = $("exportLink");
   const stlLink = $("stlLink");
   const kicadLink = $("kicadLink");
+  const viewLink = $("viewProjectLink");
   if (id) {
     if (exportLink) { exportLink.href = `/api/agents/projects/${id}/export`; show(exportLink); }
     if (stlLink) { stlLink.href = `/api/agents/projects/${id}/enclosure.stl`; show(stlLink); }
     if (kicadLink) { kicadLink.href = `/api/agents/projects/${id}/kicad.sch`; show(kicadLink); }
+    if (viewLink) {
+      viewLink.href = `/project.html?id=${encodeURIComponent(id)}`;
+      show(viewLink);
+    }
   }
 
   hide(emptyState); hide(loadingState); hide(errorState); show(results);
@@ -232,23 +235,13 @@ async function loadProjects() {
       <li data-id="${p.project_id}">
         <span class="id">${p.project_id}</span>
         <span class="prompt">${(p.prompt || "").replace(/</g, "&lt;")}</span>
-        <span class="badge ${p.status === "needs_human" ? "warn" : "ok"}">${p.status || ""}</span>
+        <span class="badge ${p.status === "needs_human" ? "warn" : p.status === "failed" ? "err" : "ok"}">${p.status || ""}</span>
       </li>`).join("");
 
     list.querySelectorAll("li[data-id]").forEach(li => {
-      li.addEventListener("click", async () => {
+      li.addEventListener("click", () => {
         const id = li.getAttribute("data-id");
-        hide(emptyState); hide(results); hide(errorState); show(loadingState);
-        try {
-          const res = await fetch(`/api/agents/projects/${id}`, { headers: authHeaders() });
-          const data = await res.json();
-          if (!data.success) throw new Error(data.error || "Load failed");
-          renderSummary({ success: true, project: data.project, status: data.project.status, project_id: id });
-        } catch (err) {
-          hide(loadingState);
-          errorState.textContent = err.message;
-          show(errorState);
-        }
+        window.location.href = `/project.html?id=${encodeURIComponent(id)}`;
       });
     });
   } catch {

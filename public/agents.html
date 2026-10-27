@@ -31,7 +31,7 @@
         <div class="examples">
           <button type="button" class="chip" data-prompt="Bluetooth Low Energy wearable tracker with 6-axis IMU, battery powered, under $15 BOM">BLE wearable + IMU</button>
           <button type="button" class="chip" data-prompt="ESP32 WiFi environmental sensor node with temperature and humidity, USB powered, module form factor">ESP32 env sensor</button>
-          <button type="button" class="chip" data-prompt="nRF52 BLE heart rate monitor, battery powered wearable, under $12 BOM">HR wearable</button>
+          <button type="button" class="chip" data-prompt="GPS fitness band, BLE, heart rate, under $25 BOM">GPS fitness band</button>
         </div>
         <button id="runBtn" class="btn primary" type="button">Run multi-agent pipeline</button>
         <p id="runHint" class="hint">Spec → Architecture → BOM → Schematic → PCB → Firmware → Enclosure → Reviewers</p>
@@ -49,7 +49,8 @@
               <p class="meta" id="resultMeta"></p>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <a id="exportLink" class="link hidden" href="#">Export JSON</a>
+              <a id="viewProjectLink" class="link hidden" href="#">Open viewer</a>
+              <a id="exportLink" class="link hidden" href="#">JSON</a>
               <a id="stlLink" class="link hidden" href="#">STL</a>
               <a id="kicadLink" class="link hidden" href="#">KiCad</a>
               <span id="resultStatus" class="badge"></span>

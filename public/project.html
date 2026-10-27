@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CircuitFlow – Project</title>
+  <link rel="stylesheet" href="/agents.css" />
+  <style>
+    .download-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 18px;
+    }
+    .download-bar a, .download-bar button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .download-bar a:hover, .download-bar button:hover {
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .download-bar a.primary {
+      background: linear-gradient(135deg, var(--accent), #4470e0);
+      border-color: transparent;
+    }
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .stat .label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .stat .value {
+      margin-top: 4px;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .back {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .back:hover { color: var(--text); }
+    table.bom {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    table.bom th, table.bom td {
+      text-align: left;
+      padding: 8px 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    table.bom th { color: var(--muted); font-weight: 600; }
+    .nav-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <span class="logo">⚡</span>
+        <div>
+          <h1>Project viewer</h1>
+          <p class="tagline">View summary &amp; download design files</p>
+        </div>
+      </div>
+      <a class="back" href="/agents.html">← Designer</a>
+    </header>
+
+    <div id="loading" class="panel loading"><div class="spinner"></div><p>Loading project…</p></div>
+    <div id="error" class="panel error hidden"></div>
+
+    <div id="content" class="hidden">
+      <div class="nav-row">
+        <div>
+          <h2 id="title" style="margin:0;font-size:1.15rem;font-family:var(--mono)"></h2>
+          <p id="prompt" class="meta" style="margin:6px 0 0"></p>
+        </div>
+        <span id="statusBadge" class="badge"></span>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><div class="label">MCU</div><div class="value" id="statMcu">—</div></div>
+        <div class="stat"><div class="label">BOM</div><div class="value" id="statBom">—</div></div>
+        <div class="stat"><div class="label">PCB</div><div class="value" id="statPcb">—</div></div>
+        <div class="stat"><div class="label">Layers</div><div class="value" id="statLayers">—</div></div>
+      </div>
+
+      <div class="download-bar" id="downloads">
+        <a id="dlJson" class="primary" href="#">Download JSON</a>
+        <a id="dlStl" href="#">Enclosure STL</a>
+        <a id="dlScad" href="#">OpenSCAD</a>
+        <a id="dlSch" href="#">KiCad schematic</a>
+        <a id="dlPcb" href="#">KiCad PCB</a>
+        <button type="button" id="dlBomCsv">BOM CSV</button>
+        <button type="button" id="copyId">Copy project ID</button>
+      </div>
+
+      <div class="layout" style="grid-template-columns:1fr 1fr">
+        <section class="panel">
+          <h2>Constraints</h2>
+          <pre id="constraintsOut"></pre>
+        </section>
+        <section class="panel">
+          <h2>Architecture</h2>
+          <pre id="archOut"></pre>
+        </section>
+      </div>
+
+      <section class="panel" style="margin-top:16px">
+        <h2>BOM line items</h2>
+        <div style="overflow-x:auto">
+          <table class="bom">
+            <thead>
+              <tr>
+                <th>Ref</th>
+                <th>MPN</th>
+                <th>Desc</th>
+                <th>Price</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="bomBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" style="margin-top:16px">
+        <h2>Reviews</h2>
+        <pre id="reviewsOut"></pre>
+      </section>
+
+      <details class="raw" style="margin-top:16px">
+        <summary>Full project JSON</summary>
+        <pre id="rawOut"></pre>
+      </details>
+    </div>
+  </div>
+  <script src="/project.js"></script>
+</body>
+</html>
