@@ -1,6 +1,6 @@
 /**
- * LangGraph Orchestrator (v1.9.2)
- * Architecture revision path: arch → component → schematic → pcb → review
+ * LangGraph Orchestrator (v1.10)
+ * Saves via store (Postgres when DATABASE_URL set, else JSON files)
  */
 
 const fs = require("fs");
@@ -18,6 +18,7 @@ const { runReviewers } = require("./reviewers");
 const { aggregateRisk } = require("./risk");
 const { runHumanEscalationAgent } = require("./humanEscalationAgent");
 const { createCheckpointer } = require("./checkpointer");
+const store = require("./store");
 
 const PROJECTS_DIR = path.join(process.cwd(), "data", "projects");
 const MAX_REVISIONS = 2;
@@ -33,7 +34,19 @@ function saveProjectToDisk(project) {
   return filePath;
 }
 
-function loadProjectFromDisk(projectId) {
+async function saveProject(project) {
+  try {
+    await store.saveProject(project);
+    return `store:${store.getStoreInfo().backend}`;
+  } catch (err) {
+    console.warn("[orchestrator] store.saveProject failed, falling back to disk:", err.message);
+    return saveProjectToDisk(project);
+  }
+}
+
+async function loadProject(projectId) {
+  const fromStore = await store.loadProject(projectId);
+  if (fromStore) return fromStore;
   const filePath = path.join(PROJECTS_DIR, `${projectId}.json`);
   if (!fs.existsSync(filePath)) throw new Error(`Project not found: ${projectId}`);
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -177,7 +190,7 @@ function escalationNode(state) {
   return { project: r.project, logs: [r.message] };
 }
 
-function finishNode(state) {
+async function finishNode(state) {
   const project = state.project;
   if (project.status !== "needs_human") {
     project.status = "completed";
@@ -196,10 +209,10 @@ function finishNode(state) {
     revision_count: state.revisionCount || 0
   });
 
-  const savedPath = saveProjectToDisk(project);
+  const saved = await saveProject(project);
   return {
     project,
-    logs: [`Pipeline finished. Status: ${project.status}`, `Saved: ${savedPath}`]
+    logs: [`Pipeline finished. Status: ${project.status}`, `Saved: ${saved}`]
   };
 }
 
@@ -295,10 +308,6 @@ async function runPipeline(userPrompt, options = {}) {
   finalState.project._thread_id = threadId;
   finalState.project._checkpointer = type;
   return finalState.project;
-}
-
-function loadProject(projectId) {
-  return loadProjectFromDisk(projectId);
 }
 
 module.exports = { runPipeline, buildGraph, loadProject, saveProjectToDisk };
