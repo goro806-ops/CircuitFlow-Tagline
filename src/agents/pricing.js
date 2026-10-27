@@ -1,6 +1,7 @@
 /**
- * Pricing / Distributor service (v1.8)
- * Mock + DigiKey + Mouser + Octopart (Nexar) adapters
+ * Pricing / Distributor service (v1.10.1)
+ * Mock + DigiKey + Mouser + Nexar
+ * Live quotes rejected if absurd (wrong MPN match / reel prices)
  */
 
 const MOCK_CATALOGUE = {
@@ -14,14 +15,20 @@ const MOCK_CATALOGUE = {
   "TMP117AIDRVR": { mpn: "TMP117AIDRVR", manufacturer: "Texas Instruments", unit_price_usd: 1.35, stock: 6700, lead_weeks: 0, lifecycle: "Active", distributor: "mock" },
   "SHT40": { mpn: "SHT40-AD1B-R2", manufacturer: "Sensirion", unit_price_usd: 1.55, stock: 2400, lead_weeks: 0, lifecycle: "Active", distributor: "mock" },
   "SHT40-AD1B-R2": { mpn: "SHT40-AD1B-R2", manufacturer: "Sensirion", unit_price_usd: 1.55, stock: 2400, lead_weeks: 0, lifecycle: "Active", distributor: "mock" },
-  "MAX30102": { mpn: "MAX30102EFD+", manufacturer: "Analog Devices", unit_price_usd: 3.10, stock: 1800, lead_weeks: 3, lifecycle: "Active", distributor: "mock" },
-  "MAX30102EFD+": { mpn: "MAX30102EFD+", manufacturer: "Analog Devices", unit_price_usd: 3.10, stock: 1800, lead_weeks: 3, lifecycle: "Active", distributor: "mock" },
-  "MAX-M10S": { mpn: "MAX-M10S", manufacturer: "u-blox", unit_price_usd: 8.20, stock: 650, lead_weeks: 4, lifecycle: "Active", distributor: "mock" },
+  "MAX30102": { mpn: "MAX30102EFD+", manufacturer: "Analog Devices", unit_price_usd: 3.1, stock: 1800, lead_weeks: 3, lifecycle: "Active", distributor: "mock" },
+  "MAX30102EFD+": { mpn: "MAX30102EFD+", manufacturer: "Analog Devices", unit_price_usd: 3.1, stock: 1800, lead_weeks: 3, lifecycle: "Active", distributor: "mock" },
+  "MAX-M10S": { mpn: "MAX-M10S", manufacturer: "u-blox", unit_price_usd: 8.2, stock: 650, lead_weeks: 4, lifecycle: "Active", distributor: "mock" },
+  "MAX-M10M": { mpn: "MAX-M10M", manufacturer: "u-blox", unit_price_usd: 7.5, stock: 400, lead_weeks: 4, lifecycle: "Active", distributor: "mock" },
   "TP4056 + DW01": { mpn: "TP4056", manufacturer: "Various", unit_price_usd: 0.32, stock: 100000, lead_weeks: 0, lifecycle: "Active", distributor: "mock" },
   "TP4056": { mpn: "TP4056", manufacturer: "Various", unit_price_usd: 0.32, stock: 100000, lead_weeks: 0, lifecycle: "Active", distributor: "mock" },
   "AP2112K-3.3": { mpn: "AP2112K-3.3TRG1", manufacturer: "Diodes Inc", unit_price_usd: 0.22, stock: 45000, lead_weeks: 0, lifecycle: "Active", distributor: "mock" },
   "AP2112K-3.3TRG1": { mpn: "AP2112K-3.3TRG1", manufacturer: "Diodes Inc", unit_price_usd: 0.22, stock: 45000, lead_weeks: 0, lifecycle: "Active", distributor: "mock" }
 };
+
+/** Absolute ceiling for a single BOM line unit price (prototype qty-1) */
+const ABS_MAX_UNIT_USD = 40;
+/** If estimate exists, live price may be at most this multiple of estimate */
+const MAX_LIVE_VS_ESTIMATE = 8;
 
 function isLivePricingEnabled() {
   return getLiveProviders().length > 0;
@@ -33,6 +40,20 @@ function getLiveProviders() {
   if (process.env.MOUSER_API_KEY) providers.push("mouser");
   if (process.env.OCTOPART_API_KEY || process.env.NEXAR_TOKEN) providers.push("octopart");
   return providers;
+}
+
+function parseMoney(val) {
+  if (val == null) return null;
+  const n = Number(String(val).replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Reject reel/tray mismatches and wrong-part hits */
+function isSaneUnitPrice(price, estimate) {
+  if (price == null || !Number.isFinite(price) || price <= 0) return false;
+  if (price > ABS_MAX_UNIT_USD) return false;
+  if (estimate != null && estimate > 0 && price > estimate * MAX_LIVE_VS_ESTIMATE) return false;
+  return true;
 }
 
 async function lookupDigiKey(mpn) {
@@ -68,11 +89,12 @@ async function lookupDigiKey(mpn) {
     const product = searchData?.Products?.[0] || searchData?.products?.[0];
     if (!product) return null;
     const priceBreaks = product.PriceBreaks || product.StandardPricing || [];
-    const unitPrice = priceBreaks[0]?.Price || priceBreaks[0]?.UnitPrice || null;
+    // Prefer qty-1 style break (last break is often high qty / low unit — first is often higher unit)
+    const unitPrice = parseMoney(priceBreaks[0]?.Price ?? priceBreaks[0]?.UnitPrice);
     return {
       mpn: product.ManufacturerProductNumber || mpn,
       manufacturer: product.Manufacturer?.Name || "Unknown",
-      unit_price_usd: unitPrice ? Number(unitPrice) : null,
+      unit_price_usd: unitPrice,
       stock: product.QuantityAvailable ?? null,
       lead_weeks: null,
       lifecycle: product.ProductStatus || "Unknown",
@@ -94,21 +116,32 @@ async function lookupMouser(mpn) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        SearchByKeywordRequest: { keyword: mpn, records: 3, startingRecord: 0 }
+        SearchByKeywordRequest: { keyword: mpn, records: 5, startingRecord: 0 }
       })
     });
     if (!res.ok) return null;
     const data = await res.json();
-    const part = data?.SearchResults?.Parts?.[0];
+    const parts = data?.SearchResults?.Parts || [];
+    // Prefer exact-ish MPN match
+    const mpnLower = String(mpn).toLowerCase();
+    const part =
+      parts.find(p => String(p.ManufacturerPartNumber || "").toLowerCase() === mpnLower) ||
+      parts.find(p => String(p.ManufacturerPartNumber || "").toLowerCase().includes(mpnLower)) ||
+      parts[0];
     if (!part) return null;
     const priceBreaks = part.PriceBreaks || [];
-    const unitPrice = priceBreaks[0]?.Price
-      ? Number(String(priceBreaks[0].Price).replace(/[^0-9.]/g, ""))
-      : null;
+    // Lowest quantity break ≈ single-unit style price
+    let best = null;
+    for (const b of priceBreaks) {
+      const p = parseMoney(b.Price);
+      const q = Number(b.Quantity) || 1;
+      if (p == null) continue;
+      if (!best || q < best.q) best = { p, q };
+    }
     return {
       mpn: part.ManufacturerPartNumber || mpn,
       manufacturer: part.Manufacturer || "Unknown",
-      unit_price_usd: unitPrice,
+      unit_price_usd: best?.p ?? null,
       stock: part.AvailabilityInStock ? Number(part.AvailabilityInStock) : null,
       lead_weeks: part.LeadTime ? parseInt(String(part.LeadTime), 10) || null : null,
       lifecycle: part.LifecycleStatus || "Unknown",
@@ -121,10 +154,6 @@ async function lookupMouser(mpn) {
   }
 }
 
-/**
- * Octopart / Nexar GraphQL (simplified)
- * Uses OCTOPART_API_KEY or NEXAR_TOKEN
- */
 async function lookupOctopart(mpn) {
   const token = process.env.NEXAR_TOKEN || process.env.OCTOPART_API_KEY;
   if (!token) return null;
@@ -159,12 +188,24 @@ async function lookupOctopart(mpn) {
     const data = await res.json();
     const part = data?.data?.supSearch?.results?.[0]?.part;
     if (!part) return null;
+    // Prefer USD qty-1
+    let unitPrice = null;
+    for (const seller of part.sellers || []) {
+      for (const offer of seller.offers || []) {
+        for (const pr of offer.prices || []) {
+          if (pr.currency && String(pr.currency).toUpperCase() !== "USD") continue;
+          const p = parseMoney(pr.price);
+          const q = Number(pr.quantity) || 1;
+          if (p == null) continue;
+          if (unitPrice == null || q === 1) unitPrice = p;
+        }
+      }
+    }
     const offer = part.sellers?.[0]?.offers?.[0];
-    const price = offer?.prices?.[0]?.price;
     return {
       mpn: part.mpn || mpn,
       manufacturer: part.manufacturer?.name || "Unknown",
-      unit_price_usd: price != null ? Number(price) : null,
+      unit_price_usd: unitPrice,
       stock: offer?.inventoryLevel ?? null,
       lead_weeks: null,
       lifecycle: "Unknown",
@@ -182,22 +223,24 @@ async function lookupMock(mpn) {
   const key = String(mpn).trim();
   if (MOCK_CATALOGUE[key]) return { ...MOCK_CATALOGUE[key], source: "mock_catalogue" };
   const found = Object.values(MOCK_CATALOGUE).find(
-    p => p.mpn.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(p.mpn.toLowerCase())
+    p =>
+      p.mpn.toLowerCase() === key.toLowerCase() ||
+      p.mpn.toLowerCase().includes(key.toLowerCase()) ||
+      key.toLowerCase().includes(p.mpn.toLowerCase())
   );
   return found ? { ...found, source: "mock_catalogue" } : null;
 }
 
-async function lookupPart(mpn) {
+async function lookupPart(mpn, estimatePrice = null) {
   if (!mpn || mpn === "TBD" || mpn === "Various") return null;
 
-  const live = await Promise.all([
-    lookupDigiKey(mpn),
-    lookupMouser(mpn),
-    lookupOctopart(mpn)
-  ]);
-  // Prefer first live hit with a price
+  const live = await Promise.all([lookupDigiKey(mpn), lookupMouser(mpn), lookupOctopart(mpn)]);
   for (const q of live) {
-    if (q && q.unit_price_usd != null) return q;
+    if (!q || q.unit_price_usd == null) continue;
+    if (isSaneUnitPrice(q.unit_price_usd, estimatePrice)) return q;
+    console.warn(
+      `[pricing] rejected ${q.source} price $${q.unit_price_usd} for ${mpn} (sane check failed)`
+    );
   }
   return lookupMock(mpn);
 }
@@ -206,10 +249,12 @@ async function enrichBomLineItems(lineItems) {
   const enriched = [];
   let pricedCount = 0;
   let liveCount = 0;
+  let rejectedLive = 0;
 
   for (const item of lineItems) {
-    const quote = await lookupPart(item.mpn);
-    if (quote && quote.unit_price_usd != null) {
+    const estimate = Number(item.unit_price_usd) || null;
+    const quote = await lookupPart(item.mpn, estimate);
+    if (quote && quote.unit_price_usd != null && isSaneUnitPrice(quote.unit_price_usd, estimate)) {
       pricedCount++;
       if (quote.source && quote.source.includes("live")) liveCount++;
       enriched.push({
@@ -223,16 +268,20 @@ async function enrichBomLineItems(lineItems) {
         distributor: quote.distributor || "mock"
       });
     } else {
+      if (quote && quote.unit_price_usd != null) rejectedLive++;
       enriched.push({
         ...item,
         stock: null,
         lead_weeks: null,
-        pricing_source: "estimate",
+        pricing_source: estimate != null ? "estimate" : "unknown",
         distributor: null
       });
     }
   }
-  return { lineItems: enriched, pricedCount, liveCount };
+  if (rejectedLive) {
+    console.warn(`[pricing] rejected ${rejectedLive} absurd live quotes, kept estimates/mock`);
+  }
+  return { lineItems: enriched, pricedCount, liveCount, rejectedLive };
 }
 
 module.exports = {
