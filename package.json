@@ -1,6 +1,6 @@
 {
   "name": "circuitflow-platform",
-  "version": "1.9.1",
+  "version": "1.10.0",
   "description": "CircuitFlow - Autonomous Electronics Design & Manufacturing SaaS Platform",
   "main": "server.js",
   "engines": {
@@ -19,7 +19,8 @@
     "cors": "^2.8.5",
     "archiver": "^7.0.1",
     "@langchain/langgraph": "^0.2.0",
-    "@langchain/core": "^0.3.0"
+    "@langchain/core": "^0.3.0",
+    "pg": "^8.13.0"
   },
   "devDependencies": {
     "jest": "^29.7.0"
