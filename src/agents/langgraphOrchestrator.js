@@ -1,6 +1,8 @@
 /**
- * LangGraph Orchestrator (v1.10)
- * Saves via store (Postgres when DATABASE_URL set, else JSON files)
+ * LangGraph Orchestrator (v1.10.1)
+ * - recursionLimit 50
+ * - Hard stop after MAX_REVISIONS
+ * - Saves via store (Postgres or JSON)
  */
 
 const fs = require("fs");
@@ -22,6 +24,7 @@ const store = require("./store");
 
 const PROJECTS_DIR = path.join(process.cwd(), "data", "projects");
 const MAX_REVISIONS = 2;
+const RECURSION_LIMIT = 50;
 
 function ensureProjectsDir() {
   if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
@@ -64,7 +67,11 @@ const GraphState = Annotation.Root({
   }),
   aggregation: Annotation({ reducer: (c, u) => u ?? c, default: () => null }),
   revisionCount: Annotation({ reducer: (c, u) => (u === undefined ? c : u), default: () => 0 }),
-  revisionTarget: Annotation({ reducer: (c, u) => u ?? c, default: () => null }),
+  revisionTarget: Annotation({
+    // Allow explicit null to clear target
+    reducer: (c, u) => (u === undefined ? c : u),
+    default: () => null
+  }),
   logs: Annotation({
     reducer: (c, u) => [...(c || []), ...(Array.isArray(u) ? u : [u])],
     default: () => []
@@ -136,9 +143,24 @@ function enclosureNode(state) {
 
 async function reviewNode(state) {
   const r = await runReviewers(state.project);
+  const atCap = (state.revisionCount || 0) >= MAX_REVISIONS;
+  const target = atCap || !r.needsRevision ? null : r.revisionTarget;
+  if (atCap && r.needsRevision) {
+    return {
+      project: r.project,
+      revisionTarget: null,
+      agentResults: {
+        agent: "Reviewers",
+        confidence: r.confidence,
+        risk_level: r.risk_level,
+        summary: r.summary + " (revision cap reached)"
+      },
+      logs: [`Reviewers → ${r.summary}`, `Revision cap (${MAX_REVISIONS}) reached – proceeding to risk`] 
+    };
+  }
   return {
     project: r.project,
-    revisionTarget: r.needsRevision ? r.revisionTarget : null,
+    revisionTarget: target,
     agentResults: {
       agent: "Reviewers",
       confidence: r.confidence,
@@ -292,7 +314,10 @@ async function runPipeline(userPrompt, options = {}) {
       revisionTarget: null,
       logs: []
     },
-    { configurable: { thread_id: threadId } }
+    {
+      configurable: { thread_id: threadId },
+      recursionLimit: RECURSION_LIMIT
+    }
   );
 
   console.log("\n--- Agent Log ---");

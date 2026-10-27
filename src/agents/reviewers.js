@@ -1,7 +1,7 @@
 /**
- * AI Expert Reviewer Agents (v1.9.2)
- * - Latest review pass only (clears previous pass)
- * - Power/MCU issues target architecture revision
+ * AI Expert Reviewer Agents (v1.10.1)
+ * - Soft advisories do not force infinite revision loops
+ * - Architecture revision only when MCU can actually change
  */
 
 const { addHistory, addReview } = require("./state");
@@ -28,11 +28,10 @@ function runSchematicReviewer(project) {
       status = "needs_changes";
       confidence -= 0.15;
     }
-    // Soft note only if architecture already moved off ESP32
     if (sch.issues?.length) {
       const filtered = sch.issues.filter(i => {
         if (/ESP32.*wearable|consider nRF52/i.test(i) && project.architecture?.mcu_family === "nrf52") {
-          return false; // already fixed
+          return false;
         }
         return true;
       });
@@ -65,6 +64,7 @@ function runLayoutReviewer(project) {
   let confidence = 0.72;
   let status = "approved";
   const pcb = project.pcb;
+  const constraints = project.user_intent?.parsed_constraints || {};
 
   if (!pcb) {
     issues.push("No PCB layout present");
@@ -81,17 +81,26 @@ function runLayoutReviewer(project) {
       status = "needs_changes";
       confidence -= 0.1;
     }
+    // Wearable size: soft note only after bias applied (do not loop forever)
     if (pcb.issues?.length) {
-      issues.push(...pcb.issues.map(i => `From layout generation: ${i}`));
-      if (status === "approved") status = "needs_changes";
-      confidence -= 0.07 * pcb.issues.length;
+      const actionable = pcb.issues.filter(i => !/large for a typical wearable/i.test(i));
+      const soft = pcb.issues.filter(i => /large for a typical wearable/i.test(i));
+      if (actionable.length) {
+        issues.push(...actionable.map(i => `From layout generation: ${i}`));
+        if (status === "approved") status = "needs_changes";
+        confidence -= 0.07 * actionable.length;
+      }
+      if (soft.length) {
+        issues.push(...soft.map(i => `Advisory: ${i}`));
+        confidence -= 0.03;
+      }
     }
     const area = pcb.outline.width_mm * pcb.outline.height_mm;
     const count = pcb.placements?.length || 0;
+    // Density: advisory only for wearables already at size cap
     if (count > 0 && area / count < 40) {
-      issues.push("High component density – may be difficult to route on current layer count");
-      if (status === "approved") status = "needs_changes";
-      confidence -= 0.1;
+      issues.push("Advisory: high component density – manual routing review recommended");
+      confidence -= 0.05;
     }
   }
 
@@ -115,6 +124,7 @@ function runPowerThermalReviewer(project) {
     status = "needs_changes";
     confidence = 0.3;
   } else {
+    // Only force changes when MCU can still switch
     if (constraints.form_factor === "wearable" && arch.mcu_family === "esp32") {
       issues.push("ESP32 may be thermally and power-hungry for a small wearable – consider nRF52");
       status = "needs_changes";
@@ -125,10 +135,10 @@ function runPowerThermalReviewer(project) {
       status = "needs_changes";
       confidence -= 0.15;
     }
+    // GPS + battery is inherent — advisory only (must NOT trigger revision loops)
     if ((constraints.sensors || []).includes("gps") && constraints.power === "battery") {
-      issues.push("GPS + battery can drain quickly – ensure aggressive power management");
-      if (status === "approved") status = "needs_changes";
-      confidence -= 0.08;
+      issues.push("Advisory: GPS + battery drains quickly – plan duty-cycling and large enough cell");
+      confidence -= 0.05;
     }
   }
 
@@ -156,10 +166,16 @@ function runDFMReviewer(project) {
       status = "needs_changes";
       confidence -= 0.12;
     }
+    // Small board: advisory if already 4-layer wearable
     if (pcb.outline.width_mm < 20 || pcb.outline.height_mm < 15) {
-      issues.push("Very small board – check fab minimum size and handling");
-      if (status === "approved") status = "needs_changes";
-      confidence -= 0.08;
+      if (pcb.layers >= 4) {
+        issues.push("Advisory: small board – check fab minimum size and handling");
+        confidence -= 0.04;
+      } else {
+        issues.push("Very small board – check fab minimum size and handling");
+        if (status === "approved") status = "needs_changes";
+        confidence -= 0.08;
+      }
     }
     const hasModule = bom?.line_items?.some(i => (i.package || "").toLowerCase().includes("module"));
     if (hasModule && pcb.layers < 4) {
@@ -199,13 +215,14 @@ async function runLLMReviewer(project) {
   const llm = await llmReviewProject(snapshot);
   if (!llm) return null;
 
-  const status = llm.overall === "needs_changes" ? "needs_changes" : "approved";
-  const issues = Array.isArray(llm.issues) ? llm.issues : [];
-  const confidence = status === "approved" ? 0.78 : 0.55;
-  const risk_level = status === "needs_changes" ? "medium" : "low";
+  // LLM notes are informational for HITL; do not force automatic revision loops
+  const issues = Array.isArray(llm.issues) ? llm.issues.map(i => `Advisory (LLM): ${i}`) : [];
+  const status = "approved";
+  const confidence = llm.overall === "needs_changes" ? 0.65 : 0.78;
+  const risk_level = llm.overall === "needs_changes" ? "medium" : "low";
 
   addReview(project, "LLMReviewer", status, confidence, risk_level, issues);
-  addHistory(project, "LLMReviewer", "reviewed_llm", { status, issue_count: issues.length });
+  addHistory(project, "LLMReviewer", "reviewed_llm", { status, issue_count: issues.length, llm_overall: llm.overall });
 
   return {
     project,
@@ -213,7 +230,7 @@ async function runLLMReviewer(project) {
     confidence,
     risk_level,
     issues,
-    summary: `LLM review: ${status} (${issues.length} issues)`
+    summary: `LLM review: ${status} (${issues.length} notes)`
   };
 }
 
@@ -224,7 +241,6 @@ function issuesSuggestNrf52(results) {
 }
 
 async function runReviewers(project) {
-  // Keep only the latest review pass
   project.reviews = [];
 
   const results = [];
@@ -258,19 +274,21 @@ async function runReviewers(project) {
   const schematicBad = results.find(x => x.name === "SchematicReviewer" && x.status !== "approved");
   const layoutBad = results.find(x => x.name === "LayoutReviewer" && x.status !== "approved");
   const dfmBad = results.find(x => x.name === "DFMReviewer" && x.status !== "approved");
-  const llmBad = results.find(x => x.name === "LLMReviewer" && x.status !== "approved");
 
-  // MCU / power issues → re-run architecture (highest impact)
-  if (powerBad && issuesSuggestNrf52(results) && project.architecture?.mcu_family === "esp32") {
+  // Only revise architecture when ESP32 can still move to nRF52
+  if (
+    powerBad &&
+    project.architecture?.mcu_family === "esp32" &&
+    (issuesSuggestNrf52(results) || project.user_intent?.parsed_constraints?.form_factor === "wearable")
+  ) {
     revisionTarget = "architecture";
     project._revision_hint = "prefer_nrf52";
-  } else if (powerBad && project.architecture?.mcu_family === "esp32") {
-    revisionTarget = "architecture";
-    project._revision_hint = "prefer_nrf52";
-  } else if (schematicBad) revisionTarget = "schematic";
-  else if (layoutBad || dfmBad) revisionTarget = "pcb";
-  else if (powerBad) revisionTarget = "architecture";
-  else if (llmBad) revisionTarget = "pcb";
+  } else if (schematicBad) {
+    revisionTarget = "schematic";
+  } else if (layoutBad || dfmBad) {
+    revisionTarget = "pcb";
+  }
+  // powerBad alone with nrf52 already → no automatic revision (advisories only)
 
   const overallConfidence = results.reduce((s, x) => s + x.confidence, 0) / results.length;
   const overallRisk = results.some(x => x.risk_level === "high")
@@ -281,12 +299,12 @@ async function runReviewers(project) {
 
   return {
     project,
-    needsRevision,
+    needsRevision: needsRevision && !!revisionTarget,
     revisionTarget,
     reviews: results,
     confidence: overallConfidence,
     risk_level: overallRisk,
-    summary: `Reviews complete (${results.length} reviewers). Revision needed: ${needsRevision}${revisionTarget ? ` → ${revisionTarget}` : ""}`
+    summary: `Reviews complete (${results.length} reviewers). Revision needed: ${needsRevision && revisionTarget ? revisionTarget : false}`
   };
 }
 
