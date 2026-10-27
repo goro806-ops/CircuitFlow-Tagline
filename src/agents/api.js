@@ -1,10 +1,8 @@
 /**
- * Multi-agent HTTP API – /api/agents  (v1.9.2)
+ * Multi-agent HTTP API – /api/agents  (v1.10)
  */
 
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
 const {
   optionalAuth,
   registerUser,
@@ -14,57 +12,22 @@ const {
   isGoogleOAuthConfigured,
   getGoogleRedirectUri
 } = require("./auth");
+const store = require("./store");
 const { generateEnclosureStl } = require("./exportStl");
 const { generateKicadProject } = require("./exportKicad");
 
 const router = express.Router();
-const PROJECTS_DIR = path.join(process.cwd(), "data", "projects");
 
 router.use(optionalAuth);
 
-function listSavedProjects(userId = null) {
-  if (!fs.existsSync(PROJECTS_DIR)) return [];
-  return fs
-    .readdirSync(PROJECTS_DIR)
-    .filter(f => f.endsWith(".json"))
-    .map(f => {
-      try {
-        const data = JSON.parse(fs.readFileSync(path.join(PROJECTS_DIR, f), "utf8"));
-        if (userId && data.owner_id && data.owner_id !== userId) return null;
-        return {
-          project_id: data.project_id,
-          status: data.status,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          prompt: data.user_intent?.raw_text?.slice(0, 120),
-          needs_human: data.status === "needs_human" || !!data.escalation,
-          bom_total: data.bom?.estimated_total || null,
-          owner_id: data.owner_id || null
-        };
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean)
-    .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
-}
-
-function loadProjectFile(id) {
-  const filePath = path.join(PROJECTS_DIR, `${id}.json`);
-  if (!fs.existsSync(filePath)) {
+async function loadProjectOrThrow(id) {
+  const project = await store.loadProject(id);
+  if (!project) {
     const err = new Error(`Project not found: ${id}`);
     err.status = 404;
     throw err;
   }
-  return { filePath, project: JSON.parse(fs.readFileSync(filePath, "utf8")) };
-}
-
-function saveProjectFile(project) {
-  if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-  const filePath = path.join(PROJECTS_DIR, `${project.project_id}.json`);
-  project.updated_at = new Date().toISOString();
-  fs.writeFileSync(filePath, JSON.stringify(project, null, 2), "utf8");
-  return filePath;
+  return project;
 }
 
 function assertOwner(req, project) {
@@ -75,10 +38,10 @@ function assertOwner(req, project) {
   }
 }
 
-router.post("/auth/register", (req, res) => {
+router.post("/auth/register", async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
-    const user = registerUser({ name, email, password });
+    const user = await registerUser({ name, email, password });
     res.json({
       success: true,
       user,
@@ -92,13 +55,13 @@ router.post("/auth/register", (req, res) => {
   }
 });
 
-router.post("/auth/login", (req, res) => {
+router.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ success: false, error: "email and password required" });
     }
-    const result = loginUser(email, password);
+    const result = await loginUser(email, password);
     res.json({ success: true, ...result, usage: "Authorization: Bearer <token>" });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
@@ -142,25 +105,18 @@ router.get("/auth/google/status", (req, res) => {
   });
 });
 
-/** Live LLM smoke test – open on phone to see real provider errors */
 router.get("/llm/test", async (req, res) => {
   try {
     const { getLLMInfo, callLLM } = require("./llm");
     const info = getLLMInfo();
     if (!info.enabled) {
-      return res.json({
-        success: false,
-        error: "No LLM provider configured",
-        llm: info
-      });
+      return res.json({ success: false, error: "No LLM provider configured", llm: info });
     }
-
     const text = await callLLM(
       "You are a test assistant. Reply with ONLY valid JSON.",
       'Return exactly: {"ok": true, "provider_check": "pass"}',
       { json: true, temperature: 0 }
     );
-
     res.json({
       success: Boolean(text),
       llm: info,
@@ -193,8 +149,8 @@ router.post("/run", async (req, res) => {
     if (req.user) {
       project.owner_id = req.user.user_id;
       project.owner_name = req.user.name;
-      saveProjectFile(project);
     }
+    await store.saveProject(project);
 
     res.json({
       success: true,
@@ -230,22 +186,19 @@ router.post("/run", async (req, res) => {
   }
 });
 
-router.get("/projects", (req, res) => {
+router.get("/projects", async (req, res) => {
   try {
     const userId = req.user ? req.user.user_id : null;
-    res.json({
-      success: true,
-      projects: listSavedProjects(userId),
-      filtered_by_owner: !!userId
-    });
+    const projects = await store.listProjects(userId);
+    res.json({ success: true, projects, filtered_by_owner: !!userId });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-router.get("/projects/:id", (req, res) => {
+router.get("/projects/:id", async (req, res) => {
   try {
-    const { project } = loadProjectFile(req.params.id);
+    const project = await loadProjectOrThrow(req.params.id);
     assertOwner(req, project);
     res.json({ success: true, project });
   } catch (err) {
@@ -253,9 +206,9 @@ router.get("/projects/:id", (req, res) => {
   }
 });
 
-router.get("/projects/:id/export", (req, res) => {
+router.get("/projects/:id/export", async (req, res) => {
   try {
-    const { project } = loadProjectFile(req.params.id);
+    const project = await loadProjectOrThrow(req.params.id);
     assertOwner(req, project);
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition", `attachment; filename="${project.project_id}.json"`);
@@ -265,9 +218,9 @@ router.get("/projects/:id/export", (req, res) => {
   }
 });
 
-router.get("/projects/:id/enclosure.scad", (req, res) => {
+router.get("/projects/:id/enclosure.scad", async (req, res) => {
   try {
-    const { project } = loadProjectFile(req.params.id);
+    const project = await loadProjectOrThrow(req.params.id);
     assertOwner(req, project);
     const scad = project.enclosure?.export?.openscad;
     if (!scad) return res.status(404).json({ success: false, error: "No OpenSCAD export" });
@@ -279,9 +232,9 @@ router.get("/projects/:id/enclosure.scad", (req, res) => {
   }
 });
 
-router.get("/projects/:id/enclosure.stl", (req, res) => {
+router.get("/projects/:id/enclosure.stl", async (req, res) => {
   try {
-    const { project } = loadProjectFile(req.params.id);
+    const project = await loadProjectOrThrow(req.params.id);
     assertOwner(req, project);
     if (!project.enclosure) return res.status(404).json({ success: false, error: "No enclosure" });
     const stl = generateEnclosureStl(project.enclosure);
@@ -293,9 +246,9 @@ router.get("/projects/:id/enclosure.stl", (req, res) => {
   }
 });
 
-router.get("/projects/:id/kicad", (req, res) => {
+router.get("/projects/:id/kicad", async (req, res) => {
   try {
-    const { project } = loadProjectFile(req.params.id);
+    const project = await loadProjectOrThrow(req.params.id);
     assertOwner(req, project);
     if (!project.schematic || !project.pcb) {
       return res.status(404).json({ success: false, error: "Need schematic and PCB" });
@@ -306,9 +259,9 @@ router.get("/projects/:id/kicad", (req, res) => {
   }
 });
 
-router.get("/projects/:id/kicad.sch", (req, res) => {
+router.get("/projects/:id/kicad.sch", async (req, res) => {
   try {
-    const { project } = loadProjectFile(req.params.id);
+    const project = await loadProjectOrThrow(req.params.id);
     assertOwner(req, project);
     const bundle = generateKicadProject(project);
     const name = Object.keys(bundle.files).find(f => f.endsWith(".kicad_sch"));
@@ -320,9 +273,9 @@ router.get("/projects/:id/kicad.sch", (req, res) => {
   }
 });
 
-router.get("/projects/:id/kicad.pcb", (req, res) => {
+router.get("/projects/:id/kicad.pcb", async (req, res) => {
   try {
-    const { project } = loadProjectFile(req.params.id);
+    const project = await loadProjectOrThrow(req.params.id);
     assertOwner(req, project);
     const bundle = generateKicadProject(project);
     const name = Object.keys(bundle.files).find(f => f.endsWith(".kicad_pcb"));
@@ -334,14 +287,14 @@ router.get("/projects/:id/kicad.pcb", (req, res) => {
   }
 });
 
-router.post("/projects/:id/review", (req, res) => {
+router.post("/projects/:id/review", async (req, res) => {
   try {
     const { decision, comments, reviewed_by } = req.body || {};
     const allowed = ["approved", "changes_requested", "rejected"];
     if (!allowed.includes(decision)) {
       return res.status(400).json({ success: false, error: `decision must be one of: ${allowed.join(", ")}` });
     }
-    const { project } = loadProjectFile(req.params.id);
+    const project = await loadProjectOrThrow(req.params.id);
     if (!project.escalation) {
       project.escalation = {
         project_id: project.project_id,
@@ -365,14 +318,14 @@ router.post("/projects/:id/review", (req, res) => {
       action: "human_decision",
       details: { decision, reviewed_by: project.escalation.reviewed_by }
     });
-    saveProjectFile(project);
+    await store.saveProject(project);
     res.json({ success: true, project_id: project.project_id, status: project.status, escalation: project.escalation });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
-router.get("/status", (req, res) => {
+router.get("/status", async (req, res) => {
   let llmInfo = { enabled: false, provider: null, model: null };
   let checkpointer = "memory";
   let pricingLive = false;
@@ -389,13 +342,18 @@ router.get("/status", (req, res) => {
     liveProviders = pricing.getLiveProviders();
   } catch (_) {}
 
+  try {
+    await store.initPostgres();
+  } catch (_) {}
+
   res.json({
     success: true,
-    version: "1.9.2",
+    version: "1.10.0",
     foundation: "complete",
     orchestrator: "langgraph",
     llm_enabled: llmInfo.enabled,
     llm: llmInfo,
+    store: store.getStoreInfo(),
     pricing: {
       mode: pricingLive ? "live" : "mock",
       providers: liveProviders
