@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { version: APP_VERSION } = require('./package.json');
 
 const architectureEngine = require('./src/engine/architecture');
 const bomEngine = require('./src/engine/bom');
@@ -35,11 +36,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check for Render / load balancers
 app.get('/health', (req, res) => {
-  res.status(200).json({ ok: true, service: 'circuitflow', version: '1.8' });
+  res.status(200).json({ ok: true, service: 'circuitflow', version: APP_VERSION });
 });
 
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ ok: true, service: 'circuitflow', version: '1.8' });
+  res.status(200).json({ ok: true, service: 'circuitflow', version: APP_VERSION });
 });
 
 app.use('/api/agents', agentsApi);

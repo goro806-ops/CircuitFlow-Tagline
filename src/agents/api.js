@@ -3,6 +3,7 @@
  */
 
 const express = require("express");
+const { version: APP_VERSION } = require("../../package.json");
 const {
   optionalAuth,
   registerUser,
@@ -348,7 +349,7 @@ router.get("/status", async (req, res) => {
 
   res.json({
     success: true,
-    version: "1.10.0",
+    version: APP_VERSION,
     foundation: "complete",
     orchestrator: "langgraph",
     llm_enabled: llmInfo.enabled,
