@@ -21,6 +21,7 @@ ENV NODE_ENV=production \
 # Reuse the tested Node 20 binary, and add the non-GUI runtime tools used by
 # CircuitFlow's SPICE, health-check, and Python KiCad-generation paths.
 COPY --from=node:20-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+USER root
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates ngspice python3 wget \
   && rm -rf /var/lib/apt/lists/* \
