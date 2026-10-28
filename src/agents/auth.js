@@ -12,6 +12,10 @@ function generateApiKey() {
   return "cf_" + crypto.randomBytes(24).toString("hex");
 }
 
+function hashApiKey(apiKey) {
+  return crypto.createHash("sha256").update(String(apiKey)).digest("hex");
+}
+
 function generateToken() {
   return "tok_" + crypto.randomBytes(32).toString("hex");
 }
@@ -121,21 +125,28 @@ async function loginWithGoogleCode(code, req) {
   const email = (profile.email || "").toLowerCase().trim();
 
   let user = null;
+  let issuedApiKey = null;
   if (profile.id) user = await store.getUserByGoogleId(profile.id);
   if (!user && email) user = await store.getUserByEmail(email);
 
   if (!user) {
+    issuedApiKey = generateApiKey();
     user = {
       user_id: "usr_" + crypto.randomBytes(8).toString("hex"),
       name: (profile.name || email || "Google user").slice(0, 64),
       email: email || null,
       google_id: profile.id || null,
       picture: profile.picture || null,
-      api_key: generateApiKey(),
+      api_key_hash: hashApiKey(issuedApiKey),
       created_at: new Date().toISOString(),
       auth_provider: "google"
     };
   } else {
+    if (user.api_key && !user.api_key_hash) {
+      issuedApiKey = user.api_key;
+      user.api_key_hash = hashApiKey(user.api_key);
+      delete user.api_key;
+    }
     user.google_id = profile.id || user.google_id;
     user.picture = profile.picture || user.picture;
     if (profile.name) user.name = profile.name.slice(0, 64);
@@ -152,7 +163,7 @@ async function loginWithGoogleCode(code, req) {
       name: user.name,
       email: user.email,
       picture: user.picture || null,
-      api_key: user.api_key
+      api_key: issuedApiKey
     }
   };
 }
@@ -168,11 +179,12 @@ async function registerUser({ name = "anonymous", email = null, password = null 
     }
   }
 
+  const apiKey = generateApiKey();
   const user = {
     user_id: "usr_" + crypto.randomBytes(8).toString("hex"),
     name: String(name).slice(0, 64) || "anonymous",
     email: email || null,
-    api_key: generateApiKey(),
+    api_key_hash: hashApiKey(apiKey),
     created_at: new Date().toISOString(),
     auth_provider: password ? "password" : "api_key"
   };
@@ -188,7 +200,7 @@ async function registerUser({ name = "anonymous", email = null, password = null 
     user_id: user.user_id,
     name: user.name,
     email: user.email,
-    api_key: user.api_key,
+    api_key: apiKey,
     has_password: !!user.password_hash
   };
 }
@@ -226,6 +238,11 @@ function optionalAuth(req, res, next) {
         else user = await store.getUserByApiKey(keyOrToken);
       }
       if (user) {
+        if (user.api_key && !user.api_key_hash) {
+          user.api_key_hash = hashApiKey(user.api_key);
+          delete user.api_key;
+          await store.upsertUser(user);
+        }
         req.user = {
           user_id: user.user_id,
           name: user.name,

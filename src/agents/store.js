@@ -140,14 +140,15 @@ async function getUserByGoogleId(googleId) {
 
 async function getUserByApiKey(apiKey) {
   if (!apiKey) return null;
+  const hash = require("crypto").createHash("sha256").update(String(apiKey)).digest("hex");
   if (await initPostgres()) {
     const r = await pool.query(
-      "SELECT data FROM cf_users WHERE data->>'api_key' = $1 LIMIT 1",
-      [apiKey]
+      "SELECT data FROM cf_users WHERE data->>'api_key_hash' = $1 OR data->>'api_key' = $2 LIMIT 1",
+      [hash, apiKey]
     );
     return r.rows[0]?.data || null;
   }
-  return loadJsonStore().users.find(u => u.api_key === apiKey) || null;
+  return loadJsonStore().users.find(u => u.api_key_hash === hash || u.api_key === apiKey) || null;
 }
 
 async function upsertUser(user) {
