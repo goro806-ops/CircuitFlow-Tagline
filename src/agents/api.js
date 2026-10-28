@@ -90,7 +90,7 @@ router.get("/auth/google/callback", async (req, res) => {
       name: result.user.name || "",
       email: result.user.email || ""
     });
-    res.redirect(`/agents.html?google_auth=1&${q.toString()}`);
+    res.redirect(`/agents.html#google_auth=1&${q.toString()}`);
   } catch (err) {
     console.error("[auth/google/callback]", err);
     res.redirect(`/agents.html?auth_error=${encodeURIComponent(err.message || "oauth_failed")}`);

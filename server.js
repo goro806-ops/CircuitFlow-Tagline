@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const { rateLimit } = require('express-rate-limit');
 const path = require('path');
 const { version: APP_VERSION } = require('./package.json');
 
@@ -28,10 +30,76 @@ const agentsApi = require('./src/agents/api');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '0.0.0.0'; // required for Render / Docker / cloud
+const HOST = process.env.HOST || '0.0.0.0'; // required for Render / cloud
 
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+
+const allowedOrigins = new Set(
+  [process.env.BASE_URL, ...(process.env.CORS_ORIGINS || '').split(',')]
+    .filter(Boolean)
+    .map((origin) => origin.trim().replace(/\/$/, ''))
+    .filter(Boolean)
+);
+if (process.env.NODE_ENV !== 'production') {
+  allowedOrigins.add('http://localhost:3000');
+  allowedOrigins.add('http://127.0.0.1:3000');
+}
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      objectSrc: ["'none'"],
+      scriptSrc: ["'self'", 'https://cdnjs.cloudflare.com'],
+      styleSrc: ["'self'", 'https://fonts.googleapis.com', "'unsafe-inline'"],
+      upgradeInsecureRequests: []
+    }
+  }
+}));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin.replace(/\/$/, ''))) return callback(null, true);
+    return callback(new Error('Origin is not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Request-ID']
+}));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '2mb' }));
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => req.path === '/health' || req.path === '/api/health'
+});
+const expensiveRunLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many design runs. Please try again later.' }
+});
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many authentication attempts. Please try again later.' }
+});
+
+app.use('/api', apiLimiter);
+app.use('/api/agents/run', expensiveRunLimiter);
+app.use('/api/agents/auth/login', authLimiter);
+app.use('/api/agents/auth/register', authLimiter);
+app.use('/api/agents/auth/google/callback', authLimiter);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check for Render / load balancers
@@ -266,6 +334,17 @@ app.post('/api/export/package', async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+app.use('/api', (req, res) => {
+  res.status(404).json({ success: false, error: 'API route not found' });
+});
+
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = err.status || (err.message === 'Origin is not allowed by CORS' ? 403 : 500);
+  if (status >= 500) console.error('[server]', err.message);
+  res.status(status).json({ success: false, error: status === 500 ? 'Internal server error' : err.message });
 });
 
 if (require.main === module) {

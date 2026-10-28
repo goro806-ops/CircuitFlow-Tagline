@@ -65,7 +65,9 @@ function setBadge(text, kind) {
 }
 
 function handleOAuthReturn() {
-  const params = new URLSearchParams(window.location.search);
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const params = new URLSearchParams([...query, ...hash]);
   if (params.get("auth_error")) {
     alert("Google sign-in failed: " + params.get("auth_error"));
     window.history.replaceState({}, "", "/agents.html");
