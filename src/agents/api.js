@@ -329,14 +329,17 @@ router.post("/projects/:id/review", async (req, res) => {
 router.get("/status", async (req, res) => {
   let llmInfo = { enabled: false, provider: null, model: null };
   let checkpointer = "memory";
+  let checkpointerInfo = { backend: "memory", ready: true, error: null, checked_at: null };
   let pricingLive = false;
   let liveProviders = [];
   try {
     llmInfo = require("./llm").getLLMInfo();
   } catch (_) {}
   try {
-    const checkpoint = require("./checkpointer").createCheckpointer();
+    const checkpointModule = require("./checkpointer");
+    const checkpoint = checkpointModule.createCheckpointer();
     checkpointer = (await checkpoint.ready) ? checkpoint.type : "memory";
+    checkpointerInfo = checkpointModule.getCheckpointerInfo();
   } catch (_) {}
   try {
     const pricing = require("./pricing");
@@ -369,6 +372,8 @@ router.get("/status", async (req, res) => {
     },
     exports: ["json", "openscad", "stl", "kicad_sch", "kicad_pcb"],
     checkpointer,
+    checkpointer_ready: checkpointerInfo.ready,
+    checkpointer_error: checkpointerInfo.error,
     endpoints: {
       google: "GET /api/agents/auth/google",
       run: "POST /api/agents/run",

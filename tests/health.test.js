@@ -24,6 +24,7 @@ async function runTests() {
     });
 
     assert.strictEqual(health.ok, true);
+    assert.strictEqual(health.readiness_endpoint, '/ready');
     assert.strictEqual(ready.ready, true);
     assert.strictEqual(ready.version, health.version);
     assert.strictEqual(apiHealth.ok, true);

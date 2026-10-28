@@ -7,7 +7,20 @@
 
 const { MemorySaver } = require("@langchain/langgraph");
 
-function memoryCheckpointer() {
+let state = {
+  backend: "unknown",
+  ready: false,
+  error: null,
+  checked_at: null
+};
+
+function memoryCheckpointer(reason = null) {
+  state = {
+    backend: "memory",
+    ready: true,
+    error: reason ? "postgres_setup_failed" : null,
+    checked_at: new Date().toISOString()
+  };
   console.warn("[checkpointer] Using MemorySaver (no DATABASE_URL or Postgres setup failed)");
   return {
     checkpointer: new MemorySaver(),
@@ -22,23 +35,31 @@ function createCheckpointer() {
 
   try {
     const { PostgresSaver } = require("@langchain/langgraph-checkpoint-postgres");
-    const checkpointer = PostgresSaver.fromConnString(process.env.DATABASE_URL, {
-      schema: process.env.LANGGRAPH_CHECKPOINT_SCHEMA || "langgraph"
-    });
+    const schema = process.env.LANGGRAPH_CHECKPOINT_SCHEMA;
+    const checkpointer = schema
+      ? PostgresSaver.fromConnString(process.env.DATABASE_URL, { schema })
+      : PostgresSaver.fromConnString(process.env.DATABASE_URL);
+    state = { backend: "postgres", ready: false, error: null, checked_at: null };
     const ready = checkpointer.setup()
       .then(() => {
+        state = { backend: "postgres", ready: true, error: null, checked_at: new Date().toISOString() };
         console.log("[checkpointer] Using PostgresSaver");
         return true;
       })
       .catch((err) => {
+        state = { backend: "postgres", ready: false, error: "postgres_setup_failed", checked_at: new Date().toISOString() };
         console.warn("[checkpointer] Postgres setup failed:", err.message);
         return false;
       });
     return { checkpointer, type: "postgres", path: null, ready };
   } catch (err) {
     console.warn("[checkpointer] PostgresSaver unavailable:", err.message);
-    return memoryCheckpointer();
+    return memoryCheckpointer("postgres_setup_failed");
   }
 }
 
-module.exports = { createCheckpointer, memoryCheckpointer };
+function getCheckpointerInfo() {
+  return { ...state };
+}
+
+module.exports = { createCheckpointer, memoryCheckpointer, getCheckpointerInfo };

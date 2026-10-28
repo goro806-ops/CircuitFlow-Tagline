@@ -105,14 +105,26 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check for Render / load balancers
 app.get('/health', (req, res) => {
-  res.status(200).json({ ok: true, service: 'circuitflow', version: APP_VERSION });
+  res.status(200).json({
+    ok: true,
+    service: 'circuitflow',
+    version: APP_VERSION,
+    build_commit: process.env.RENDER_GIT_COMMIT || null,
+    readiness_endpoint: '/ready'
+  });
 });
 
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ ok: true, service: 'circuitflow', version: APP_VERSION });
+  res.status(200).json({
+    ok: true,
+    service: 'circuitflow',
+    version: APP_VERSION,
+    build_commit: process.env.RENDER_GIT_COMMIT || null,
+    readiness_endpoint: '/ready'
+  });
 });
 
-app.get('/ready', async (req, res) => {
+app.get(['/ready', '/api/ready'], async (req, res) => {
   try {
     const postgresConfigured = persistentStore.hasDatabaseUrl();
     const postgresReady = postgresConfigured ? await persistentStore.initPostgres() : false;
