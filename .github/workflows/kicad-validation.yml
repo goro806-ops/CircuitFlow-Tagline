@@ -39,6 +39,7 @@ jobs:
         run: |
           set +e
           docker run --rm \
+            --user 0:0 \
             -v "$PWD/artifacts/kicad:/workspace" \
             kicad/kicad:9.0.7-amd64-full \
             bash -lc 'kicad-cli pcb drc --exit-code-violations --output /workspace/pcb-drc.json /workspace/circuitflow-ci-fixture.kicad_pcb; pcb=$?; kicad-cli sch erc --exit-code-violations --output /workspace/schematic-erc.json /workspace/circuitflow-ci-fixture.kicad_sch; sch=$?; printf "pcb_exit=%s sch_exit=%s\n" "$pcb" "$sch" > /workspace/exit-codes.txt; if [ "$pcb" -ne 0 ] && [ "$pcb" -ne 5 ]; then exit "$pcb"; fi; if [ "$sch" -ne 0 ] && [ "$sch" -ne 5 ]; then exit "$sch"; fi; exit 0'
