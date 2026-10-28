@@ -1,3 +1,5 @@
+const { solveSpiceNetlist } = require("./ngspice");
+
 /**
  * SPICE Circuit Simulation & Thermal Analysis Engine
  * CircuitFlow Platform
@@ -10,13 +12,16 @@ function runSimulationAndThermal(architecture = {}, bom = {}, consumer = {}, sha
   // SPICE Netlist Simulation
   const spiceNetlist = `* CircuitFlow SPICE Operating Point Simulation
 V_USB VBUS 0 DC 5.0V
-U_REG VBUS VCC 0 AMS1117_3V3
+* Idealized 3.3V regulator model for portable operating-point validation
+V_REG VCC 0 DC 3.3V
 C_DEC VCC 0 1uF
 R_PULLUP_SDA VCC SDA 4.7k
 R_PULLUP_SCL VCC SCL 4.7k
 .OP
 .END
 `;
+
+  const solver = solveSpiceNetlist(spiceNetlist);
 
   const nodeVoltages = {
     'VBUS (USB)': '5.00 V',
@@ -64,7 +69,15 @@ R_PULLUP_SCL VCC SCL 4.7k
 
   return {
     spiceNetlist,
-    nodeVoltages,
+    nodeVoltages: solver.available && solver.status === 'CONVERGED'
+      ? Object.fromEntries(Object.entries(solver.nodalVoltages).map(([node, voltage]) => [node, `${voltage.toFixed(3)} V`]))
+      : nodeVoltages,
+    simulation: {
+      engine: solver.engine,
+      status: solver.status,
+      available: solver.available,
+      analytical_fallback: !(solver.available && solver.status === 'CONVERGED')
+    },
     thermalAnalysis: {
       ambientTemp_C,
       maxSystemTemp_C: Math.max(mcuJunctionTemp_C, regJunctionTemp_C),

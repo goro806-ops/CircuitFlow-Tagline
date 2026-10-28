@@ -1,25 +1,65 @@
 /**
- * CircuitFlow SPICE Nodal Matrix Solver
+ * Optional ngspice batch adapter.
+ * The application remains portable when ngspice is not installed, but never
+ * labels analytical fallback values as a real solver result.
  */
 
-function solveSpiceNetlist(netlistStr) {
-  return {
-    netlist: netlistStr || "* CircuitFlow SPICE Netlist\nV1 VDD GND 3.3\nR1 VDD N001 4.7k\n",
-    nodalVoltages: {
-      "VDD": 3.30,
-      "GND": 0.00,
-      "N001": 3.12,
-      "MCU_VDD": 3.28
-    },
-    transientResponse: {
-      timeStep_ms: 0.1,
-      peakInrushCurrent_mA: 142.5,
-      settlingTime_ms: 0.85
-    },
-    status: "CONVERGED_SUCCESSFULLY"
-  };
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { spawnSync } = require("child_process");
+
+function parseOperatingPoint(output) {
+  const voltages = {};
+  const tableMatch = output.match(/Node\s+Voltage\s+\n([\s\S]*?)(?:\n\s*\n|Source\s+Current|Total analysis time)/i);
+  const table = tableMatch ? tableMatch[1] : output;
+  for (const line of table.split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][\w()\-]*)\s+([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)/);
+    if (match) voltages[match[1]] = Number(match[2]);
+  }
+  return voltages;
 }
 
-module.exports = {
-  solveSpiceNetlist
-};
+function solveSpiceNetlist(netlistStr) {
+  const netlist = String(netlistStr || "").trim() + "\n";
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "circuitflow-ngspice-"));
+  const inputPath = path.join(workDir, "circuit.cir");
+  try {
+    fs.writeFileSync(inputPath, netlist, "utf8");
+    const result = spawnSync("ngspice", ["-b", inputPath], {
+      encoding: "utf8",
+      timeout: 15_000,
+      maxBuffer: 2 * 1024 * 1024
+    });
+    if (result.error) {
+      return {
+        available: false,
+        engine: "analytical_estimate",
+        status: "NGSPICE_UNAVAILABLE",
+        error_code: result.error.code || "spawn_error",
+        nodalVoltages: {}
+      };
+    }
+    const output = `${result.stdout || ""}\n${result.stderr || ""}`;
+    if (result.status !== 0) {
+      return {
+        available: true,
+        engine: "ngspice",
+        status: "NGSPICE_FAILED",
+        exit_code: result.status,
+        error: output.slice(-1000),
+        nodalVoltages: {}
+      };
+    }
+    return {
+      available: true,
+      engine: "ngspice",
+      status: "CONVERGED",
+      nodalVoltages: parseOperatingPoint(output)
+    };
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+module.exports = { solveSpiceNetlist, parseOperatingPoint };

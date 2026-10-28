@@ -9,6 +9,7 @@
 - OAuth callback tokens are delivered in URL fragments rather than query parameters.
 - Postgres is the expected cloud persistence backend. `/ready` reports failure when a configured database cannot be initialized.
 - Production dependency auditing runs in GitHub Actions.
+- SPICE output reports whether `ngspice` actually converged; when the binary is unavailable, the result is explicitly marked as an analytical fallback.
 
 ## Secrets
 

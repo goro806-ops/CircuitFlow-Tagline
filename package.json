@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node tests/engine.test.js && node tests/health.test.js && node tests/auth.test.js",
+    "test": "node tests/engine.test.js && node tests/health.test.js && node tests/auth.test.js && node tests/spice.test.js",
     "test:agents": "node tests/agents.smoke.test.js",
     "agents": "node src/agents/run.js",
     "agents:example": "node src/agents/run.js \"Bluetooth Low Energy wearable tracker with 6-axis IMU, battery powered, under $15 BOM\"",
