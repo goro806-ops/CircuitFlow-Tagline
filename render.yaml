@@ -5,7 +5,7 @@ services:
     plan: free
     buildCommand: npm install --omit=dev
     startCommand: node server.js
-    healthCheckPath: /health
+    healthCheckPath: /ready
     envVars:
       - key: NODE_VERSION
         value: "20"

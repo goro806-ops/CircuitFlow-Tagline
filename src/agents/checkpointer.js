@@ -1,14 +1,44 @@
 /**
- * Checkpointer factory
- * Uses MemorySaver only (no native sqlite) so Render/Node builds stay clean.
- * Projects are still persisted as JSON under data/projects/.
+ * Checkpointer factory.
+ *
+ * Postgres is used when DATABASE_URL is configured so an in-flight graph can
+ * resume after a process restart. MemorySaver remains the local/test fallback.
  */
 
 const { MemorySaver } = require("@langchain/langgraph");
 
-function createCheckpointer() {
-  console.log("[checkpointer] Using MemorySaver (portable, no native deps)");
-  return { checkpointer: new MemorySaver(), type: "memory", path: null };
+function memoryCheckpointer() {
+  console.warn("[checkpointer] Using MemorySaver (no DATABASE_URL or Postgres setup failed)");
+  return {
+    checkpointer: new MemorySaver(),
+    type: "memory",
+    path: null,
+    ready: Promise.resolve(true)
+  };
 }
 
-module.exports = { createCheckpointer };
+function createCheckpointer() {
+  if (!process.env.DATABASE_URL) return memoryCheckpointer();
+
+  try {
+    const { PostgresSaver } = require("@langchain/langgraph-checkpoint-postgres");
+    const checkpointer = PostgresSaver.fromConnString(process.env.DATABASE_URL, {
+      schema: process.env.LANGGRAPH_CHECKPOINT_SCHEMA || "langgraph"
+    });
+    const ready = checkpointer.setup()
+      .then(() => {
+        console.log("[checkpointer] Using PostgresSaver");
+        return true;
+      })
+      .catch((err) => {
+        console.warn("[checkpointer] Postgres setup failed:", err.message);
+        return false;
+      });
+    return { checkpointer, type: "postgres", path: null, ready };
+  } catch (err) {
+    console.warn("[checkpointer] PostgresSaver unavailable:", err.message);
+    return memoryCheckpointer();
+  }
+}
+
+module.exports = { createCheckpointer, memoryCheckpointer };

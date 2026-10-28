@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const { rateLimit } = require('express-rate-limit');
 const path = require('path');
 const { version: APP_VERSION } = require('./package.json');
+const persistentStore = require('./src/agents/store');
 
 const architectureEngine = require('./src/engine/architecture');
 const bomEngine = require('./src/engine/bom');
@@ -109,6 +110,21 @@ app.get('/health', (req, res) => {
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({ ok: true, service: 'circuitflow', version: APP_VERSION });
+});
+
+app.get('/ready', async (req, res) => {
+  try {
+    const postgresConfigured = persistentStore.hasDatabaseUrl();
+    const postgresReady = postgresConfigured ? await persistentStore.initPostgres() : false;
+    const store = persistentStore.getStoreInfo();
+    if (postgresConfigured && !postgresReady) {
+      return res.status(503).json({ ready: false, service: 'circuitflow', version: APP_VERSION, store });
+    }
+    res.status(200).json({ ready: true, service: 'circuitflow', version: APP_VERSION, store });
+  } catch (err) {
+    console.error('[ready]', err.message);
+    res.status(503).json({ ready: false, service: 'circuitflow', version: APP_VERSION });
+  }
 });
 
 app.use('/api/agents', agentsApi);

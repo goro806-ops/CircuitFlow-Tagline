@@ -20,7 +20,7 @@ const { runEnclosureAgent } = require("./enclosureAgent");
 const { runReviewers } = require("./reviewers");
 const { aggregateRisk } = require("./risk");
 const { runHumanEscalationAgent } = require("./humanEscalationAgent");
-const { createCheckpointer } = require("./checkpointer");
+const { createCheckpointer, memoryCheckpointer } = require("./checkpointer");
 const store = require("./store");
 
 // Optional new agents (soft-load)
@@ -296,7 +296,9 @@ async function runPipeline(userPrompt, options = {}) {
   console.log(`Thread ID:   ${threadId}\n`);
   const project = createEmptyProject(userPrompt);
   console.log(`Project ID:  ${project.project_id}`);
-  const { checkpointer, type } = createCheckpointer();
+  let checkpoint = createCheckpointer();
+  if (!(await checkpoint.ready)) checkpoint = memoryCheckpointer();
+  const { checkpointer, type } = checkpoint;
   const app = buildGraph(checkpointer);
   const finalState = await app.invoke(
     { project, agentResults: [], aggregation: null, revisionCount: 0, revisionTarget: null, logs: [] },

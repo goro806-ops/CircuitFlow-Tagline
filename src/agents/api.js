@@ -335,7 +335,8 @@ router.get("/status", async (req, res) => {
     llmInfo = require("./llm").getLLMInfo();
   } catch (_) {}
   try {
-    checkpointer = require("./checkpointer").createCheckpointer().type;
+    const checkpoint = require("./checkpointer").createCheckpointer();
+    checkpointer = (await checkpoint.ready) ? checkpoint.type : "memory";
   } catch (_) {}
   try {
     const pricing = require("./pricing");

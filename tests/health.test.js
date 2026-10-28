@@ -13,6 +13,8 @@ async function runTests() {
     const baseUrl = `http://127.0.0.1:${port}`;
     const healthResponse = await fetch(`${baseUrl}/health`);
     const health = await healthResponse.json();
+    const readyResponse = await fetch(`${baseUrl}/ready`);
+    const ready = await readyResponse.json();
     const apiHealth = await fetch(`${baseUrl}/api/health`).then((response) => response.json());
     const status = await fetch(`${baseUrl}/api/agents/status`).then((response) => response.json());
     const missingResponse = await fetch(`${baseUrl}/api/not-a-route`);
@@ -22,6 +24,8 @@ async function runTests() {
     });
 
     assert.strictEqual(health.ok, true);
+    assert.strictEqual(ready.ready, true);
+    assert.strictEqual(ready.version, health.version);
     assert.strictEqual(apiHealth.ok, true);
     assert.strictEqual(health.version, apiHealth.version);
     assert.strictEqual(status.version, health.version);
