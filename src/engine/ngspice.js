@@ -13,9 +13,12 @@ function parseOperatingPoint(output) {
   const voltages = {};
   const tableMatch = output.match(/Node\s+Voltage\s+\n([\s\S]*?)(?:\n\s*\n|Source\s+Current|Total analysis time)/i);
   const table = tableMatch ? tableMatch[1] : output;
+  const expectedNodes = new Set(['vbus', 'vcc', 'sda', 'scl', 'gnd']);
   for (const line of table.split(/\r?\n/)) {
     const match = line.match(/^\s*([A-Za-z_][\w()\-]*)\s+([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)/);
-    if (match) voltages[match[1]] = Number(match[2]);
+    if (match && expectedNodes.has(match[1].toLowerCase())) {
+      voltages[match[1].toLowerCase()] = Number(match[2]);
+    }
   }
   return voltages;
 }

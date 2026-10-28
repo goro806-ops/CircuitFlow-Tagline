@@ -16,6 +16,7 @@ const {
 const store = require("./store");
 const { generateEnclosureStl } = require("./exportStl");
 const { generateKicadProject } = require("./exportKicad");
+const { validateKicadBundle } = require("../engine/kicadCli");
 
 const router = express.Router();
 
@@ -254,7 +255,8 @@ router.get("/projects/:id/kicad", async (req, res) => {
     if (!project.schematic || !project.pcb) {
       return res.status(404).json({ success: false, error: "Need schematic and PCB" });
     }
-    res.json({ success: true, kicad: generateKicadProject(project) });
+    const kicad = generateKicadProject(project);
+    res.json({ success: true, kicad, validation: validateKicadBundle(kicad.files) });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }

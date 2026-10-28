@@ -67,11 +67,23 @@ R_PULLUP_SCL VCC SCL 4.7k
     }
   ];
 
+  const solvedNodeVoltages = { ...nodeVoltages };
+  if (solver.available && solver.status === 'CONVERGED') {
+    const labels = {
+      vbus: 'VBUS (USB)',
+      vcc: 'VCC (3.3V Rail)',
+      sda: 'SDA (I2C)',
+      scl: 'SCL (I2C)',
+      gnd: 'GND'
+    };
+    for (const [node, voltage] of Object.entries(solver.nodalVoltages)) {
+      if (labels[node]) solvedNodeVoltages[labels[node]] = `${voltage.toFixed(3)} V`;
+    }
+  }
+
   return {
     spiceNetlist,
-    nodeVoltages: solver.available && solver.status === 'CONVERGED'
-      ? Object.fromEntries(Object.entries(solver.nodalVoltages).map(([node, voltage]) => [node, `${voltage.toFixed(3)} V`]))
-      : nodeVoltages,
+    nodeVoltages: solvedNodeVoltages,
     simulation: {
       engine: solver.engine,
       status: solver.status,

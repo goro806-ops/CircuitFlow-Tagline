@@ -18,6 +18,10 @@ uses the in-memory fallback.
 | Liveness check | `/health` |
 | Readiness check | `/ready` |
 
+The Node/Render runtime is the lightweight profile. The repository Dockerfile is the
+full validation profile and installs `ngspice`, Python, and KiCad CLI so generated
+hardware can be checked with real tools.
+
 In Render: **Settings → Environment → Node Version → 20**
 
 Or set env var:
@@ -38,7 +42,7 @@ NODE_VERSION=20
 | `BASE_URL` | `https://YOUR-APP.onrender.com` |
 | `CORS_ORIGINS` | Optional comma-separated browser origins |
 | `DATABASE_URL` | Postgres connection string; required for durable cloud data |
-| `LANGGRAPH_CHECKPOINT_SCHEMA` | Optional schema name; defaults to `langgraph` |
+| `LANGGRAPH_CHECKPOINT_SCHEMA` | Optional schema name; defaults to Postgres `public` |
 | `HOST` | `0.0.0.0` |
 
 Claude is preferred automatically when `ANTHROPIC_API_KEY` is set.
@@ -50,6 +54,7 @@ Claude is preferred automatically when `ANTHROPIC_API_KEY` is set.
 3. Open `https://YOUR-APP.onrender.com/agents.html`.
 4. Check `https://YOUR-APP.onrender.com/api/agents/status` — confirm the expected version, LLM provider, and live pricing mode.
 5. Run one small design smoke test and confirm the returned project can be fetched again by its project ID.
+6. When using the Docker profile, inspect `/api/agents/projects/:id/kicad`; its `validation` field reports KiCad CLI DRC/ERC as `PASSED`, `FAILED`, or `KICAD_CLI_UNAVAILABLE`.
 
 ## Redeploy
 
@@ -64,3 +69,4 @@ After pulling these fixes from GitHub, click **Manual Deploy → Deploy latest c
 - Review `npm audit --omit=dev --audit-level=high` and the GitHub Actions result before each release.
 - The free Render plan sleeps and is not suitable for latency-sensitive production workloads.
 - Hardware outputs remain engineer-review artifacts until KiCad DRC, electrical simulation, DFM, and regulatory review pass.
+- The scheduled backup workflow requires a GitHub repository secret named `DATABASE_URL`; it creates a 14-day artifact backup at 02:17 UTC and should be paired with an off-provider encrypted copy.

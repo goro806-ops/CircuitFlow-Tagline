@@ -1,0 +1,38 @@
+name: Scheduled Postgres Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Create backup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_DIR: backups
+          RETENTION_DAYS: 14
+        run: |
+          test -n "$DATABASE_URL" || { echo 'DATABASE_URL repository secret is required'; exit 1; }
+          ./scripts/backup-postgres.sh
+
+      - name: Upload encrypted-storage-backed artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuitflow-postgres-backup-${{ github.run_id }}
+          path: backups/
+          retention-days: 14
+          if-no-files-found: error
