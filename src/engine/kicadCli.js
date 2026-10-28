@@ -37,8 +37,8 @@ function validateKicadBundle(files = {}) {
   try {
     fs.writeFileSync(pcbPath, files[pcbName], 'utf8');
     fs.writeFileSync(schPath, files[schName], 'utf8');
-    const pcb = runCli(['pcb', 'drc', '--output', pcbReport, pcbPath], pcbReport);
-    const sch = runCli(['sch', 'erc', '--output', schReport, schPath], schReport);
+    const pcb = runCli(['pcb', 'drc', '--exit-code-violations', '--output', pcbReport, pcbPath], pcbReport);
+    const sch = runCli(['sch', 'erc', '--exit-code-violations', '--output', schReport, schPath], schReport);
     if (!pcb.available || !sch.available) {
       return { engine: 'kicad-cli', status: 'KICAD_CLI_UNAVAILABLE', available: false };
     }
