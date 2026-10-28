@@ -15,15 +15,12 @@
     "agents:classic": "USE_CLASSIC=1 node src/agents/run.js \"Bluetooth Low Energy wearable tracker with 6-axis IMU, battery powered, under $15 BOM\""
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "cors": "^2.8.5",
-    "archiver": "^7.0.1",
-    "@langchain/langgraph": "^0.2.0",
     "@langchain/core": "^0.3.0",
+    "@langchain/langgraph": "^0.2.0",
+    "archiver": "^7.0.1",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "pg": "^8.13.0"
-  },
-  "devDependencies": {
-    "jest": "^29.7.0"
   },
   "keywords": [
     "eda",
