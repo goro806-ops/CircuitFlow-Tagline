@@ -1,0 +1,55 @@
+name: KiCad CLI Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kicad-cli:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm ci
+
+      - name: Generate CircuitFlow KiCad fixture
+        run: node scripts/generate-kicad-fixture.js artifacts/kicad
+
+      - name: Verify official KiCad CLI image
+        run: |
+          docker run --rm kicad/kicad:9.0.7-amd64-full kicad-cli version
+
+      - name: Run KiCad DRC and ERC in official container
+        shell: bash
+        run: |
+          set +e
+          docker run --rm \
+            -v "$PWD/artifacts/kicad:/workspace" \
+            kicad/kicad:9.0.7-amd64-full \
+            bash -lc 'kicad-cli pcb drc --exit-code-violations --output /workspace/pcb-drc.json /workspace/circuitflow-ci-fixture.kicad_pcb; pcb=$?; kicad-cli sch erc --exit-code-violations --output /workspace/schematic-erc.json /workspace/circuitflow-ci-fixture.kicad_sch; sch=$?; printf "pcb_exit=%s sch_exit=%s\n" "$pcb" "$sch" > /workspace/exit-codes.txt; if [ "$pcb" -ne 0 ] && [ "$pcb" -ne 5 ]; then exit "$pcb"; fi; if [ "$sch" -ne 0 ] && [ "$sch" -ne 5 ]; then exit "$sch"; fi; exit 0'
+          status=$?
+          cat artifacts/kicad/exit-codes.txt || true
+          exit "$status"
+
+      - name: Upload KiCad reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kicad-validation-reports-${{ github.run_id }}
+          path: artifacts/kicad/
+          if-no-files-found: warn

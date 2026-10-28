@@ -1,0 +1,16 @@
+# Apply this Blueprint when switching CircuitFlow from the native Node runtime
+# to the full Docker validation runtime. It is intentionally separate from
+# render.yaml so the current live service is not changed without an operator sync.
+services:
+  - type: web
+    name: circuitflow-docker
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /ready
+    envVars:
+      - key: HOST
+        value: "0.0.0.0"
+      - key: NODE_ENV
+        value: "production"

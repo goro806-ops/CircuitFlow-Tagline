@@ -22,6 +22,11 @@ The Node/Render runtime is the lightweight profile. The repository Dockerfile is
 full validation profile and installs `ngspice`, Python, and KiCad CLI so generated
 hardware can be checked with real tools.
 
+For the phone-friendly cloud path, use `.github/workflows/kicad-validation.yml` for
+official KiCad container checks. To create a full EDA-capable Render service without
+changing this live service automatically, use `render.docker.yaml` as a separate
+Blueprint and copy the existing environment variables and Postgres connection.
+
 In Render: **Settings → Environment → Node Version → 20**
 
 Or set env var:
