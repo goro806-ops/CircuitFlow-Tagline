@@ -44,3 +44,6 @@ jobs:
 
       - name: Check production dependency audit
         run: npm audit --omit=dev --audit-level=high
+
+      - name: Validate operational scripts
+        run: bash -n scripts/backup-postgres.sh scripts/restore-postgres.sh
