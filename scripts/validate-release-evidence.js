@@ -10,6 +10,7 @@ const requiredFiles = [
   'docs/SAFETY_REGULATORY_REVIEW_PACKAGE.md',
   'docs/REGULATORY_EVIDENCE_INDEX.md',
   'docs/SAFETY_COMPLIANCE_TEST_PLAN.md',
+  'docs/AUTOMATED_EVIDENCE_SNAPSHOT.md',
   'docs/VALIDATION_MATRIX.md'
 ];
 const requiredSections = {
@@ -32,6 +33,10 @@ const requiredSections = {
     '## Configuration to freeze',
     '## Formal lab planning',
     '## Exit criteria'
+  ],
+  'docs/AUTOMATED_EVIDENCE_SNAPSHOT.md': [
+    '## Automated results',
+    '## Human gates still open'
   ]
 };
 

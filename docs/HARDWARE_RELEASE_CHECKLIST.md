@@ -66,3 +66,4 @@ For every item, record an evidence ID or a written not-applicable rationale. A g
 - [Safety and Regulatory Review Package](SAFETY_REGULATORY_REVIEW_PACKAGE.md)
 - [Regulatory Evidence Index](REGULATORY_EVIDENCE_INDEX.md)
 - [Safety Compliance Test Plan](SAFETY_COMPLIANCE_TEST_PLAN.md)
+- [Automated Evidence Snapshot](AUTOMATED_EVIDENCE_SNAPSHOT.md)
