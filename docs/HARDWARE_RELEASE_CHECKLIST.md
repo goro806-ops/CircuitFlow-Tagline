@@ -1,6 +1,8 @@
 # Hardware Release Checklist
 
-This checklist is the release gate for any CircuitFlow-generated design. Generated artifacts are engineering aids until every applicable item has a named reviewer and evidence attached.
+This checklist is the release gate for any CircuitFlow-generated design. Generated artifacts are engineering aids until every applicable item has a named reviewer and evidence attached. Use the [Safety and Regulatory Review Package](SAFETY_REGULATORY_REVIEW_PACKAGE.md), [Regulatory Evidence Index](REGULATORY_EVIDENCE_INDEX.md), and [Safety Compliance Test Plan](SAFETY_COMPLIANCE_TEST_PLAN.md) for the human review workflow.
+
+For every item, record an evidence ID or a written not-applicable rationale. A green automated check is not a safety approval, regulatory authorization, or manufacturing release.
 
 ## 1. Requirements and architecture
 
@@ -36,10 +38,15 @@ This checklist is the release gate for any CircuitFlow-generated design. Generat
 
 ## 5. Safety and regulatory
 
-- [ ] Applicable CE/FCC/UKCA/IC/RED/Bluetooth or other market requirements are identified.
-- [ ] Battery, charger, transport, thermal, fire, and material compliance requirements are documented.
-- [ ] Required lab tests and accredited reports are scheduled or complete.
-- [ ] User instructions, warnings, labels, and service information are reviewed.
+- [ ] Intended use, foreseeable misuse, product classification, target markets, and responsible compliance reviewer are recorded.
+- [ ] Applicable EU RED/EMC/safety, US FCC, Canada ISED, UK, Bluetooth, or other market requirements are identified or marked not applicable with rationale.
+- [ ] Radio module, antenna, firmware radio settings, enclosure, simultaneous-transmission modes, and host-integration conditions are frozen and reviewed.
+- [ ] Battery, charger, transport, thermal, fire, and material compliance requirements are documented, or marked not applicable with rationale.
+- [ ] RoHS/material declarations and WEEE producer-responsibility obligations are mapped to the final BOM where applicable.
+- [ ] Required laboratory tests, accredited reports, declarations, and authorization records are scheduled or complete.
+- [ ] User instructions, warnings, rating labels, radio identifiers, disposal marks, and service information are reviewed.
+- [ ] Open hazards have controls, verification evidence, owners, and residual-risk decisions.
+- [ ] Human safety/regulatory gate is accepted in the [review package](SAFETY_REGULATORY_REVIEW_PACKAGE.md).
 
 ## 6. Release sign-off
 
@@ -53,3 +60,9 @@ This checklist is the release gate for any CircuitFlow-generated design. Generat
 | Product owner |  |  |  |  |
 
 **Release rule:** do not label a design production-ready until all applicable rows are signed and all unexplained DRC/ERC, simulation, DFM, safety, and regulatory issues are closed or formally accepted.
+
+## Review package links
+
+- [Safety and Regulatory Review Package](SAFETY_REGULATORY_REVIEW_PACKAGE.md)
+- [Regulatory Evidence Index](REGULATORY_EVIDENCE_INDEX.md)
+- [Safety Compliance Test Plan](SAFETY_COMPLIANCE_TEST_PLAN.md)
