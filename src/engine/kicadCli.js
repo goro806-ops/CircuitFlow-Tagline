@@ -11,8 +11,12 @@ function runCli(args, reportPath) {
   });
   if (result.error) return { available: false, status: 'KICAD_CLI_UNAVAILABLE', error_code: result.error.code || 'spawn_error' };
   let report = null;
+  let reportText = null;
   if (reportPath && fs.existsSync(reportPath)) {
-    try { report = JSON.parse(fs.readFileSync(reportPath, 'utf8')); } catch (_) { report = null; }
+    try {
+      reportText = fs.readFileSync(reportPath, 'utf8');
+      try { report = JSON.parse(reportText); } catch (_) { /* KiCad may emit text reports. */ }
+    } catch (_) { reportText = null; }
   }
   const stdout = String(result.stdout || '').trim();
   const stderr = String(result.stderr || '').trim();
@@ -21,7 +25,7 @@ function runCli(args, reportPath) {
     status: result.status === 0 ? 'PASSED' : 'FAILED',
     exit_code: result.status,
     report,
-    diagnostics: (stderr || stdout).slice(-4000) || null
+    diagnostics: `${stderr || stdout}\n${reportText || ''}`.trim().slice(-8000) || null
   };
 }
 
