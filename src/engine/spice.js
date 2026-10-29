@@ -1,4 +1,5 @@
 const { solveSpiceNetlist } = require("./ngspice");
+const { loadVendorModelRegistry } = require("./vendorModels");
 
 /**
  * SPICE Circuit Simulation & Thermal Analysis Engine
@@ -83,6 +84,11 @@ R_PULLUP_SCL VCC SCL 4.7k
 
   return {
     spiceNetlist,
+    modelProvenance: {
+      registry_schema_version: loadVendorModelRegistry().schema_version,
+      selected_model: null,
+      note: "This baseline deck uses idealized sources. Select and license an exact vendor model before safety- or performance-critical release simulation."
+    },
     nodeVoltages: solvedNodeVoltages,
     simulation: {
       engine: solver.engine,

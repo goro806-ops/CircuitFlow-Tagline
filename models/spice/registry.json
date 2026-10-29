@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "purpose": "Registry of vendor-supplied models approved for ingestion; model files are not bundled until their license permits redistribution.",
+  "models": [
+    {
+      "id": "rohm-ldo-macromodel",
+      "vendor": "ROHM",
+      "family": "LDO IC PSpice macromodel",
+      "source_url": "https://www.rohm.com/support/design-model",
+      "simulators": ["PSpice", "ngspice-compatibility-review-required"],
+      "model_level": "function-based IC model",
+      "status": "source-available-not-ingested",
+      "license_action": "Download from the selected product page and record the vendor license before private deployment.",
+      "validation_required": ["pin mapping", "transient load", "dropout", "current limit", "temperature limits"]
+    },
+    {
+      "id": "renesas-raa214023",
+      "vendor": "Renesas",
+      "part_number": "RAA214023",
+      "family": "LDO PSpice macromodel",
+      "source_url": "https://www.renesas.com/ja/document/apn/raa214023-spice-model-application-note",
+      "simulators": ["PSpice", "ngspice-compatibility-review-required"],
+      "status": "source-available-not-ingested",
+      "license_action": "Obtain the model from the product page and retain the vendor license with the private model artifact.",
+      "known_limits": ["typical room-temperature parameters", "no thermal effects", "no process or part-to-part variation", "package differences excluded"],
+      "validation_required": ["VIN/VOUT transient", "load transient", "PSRR", "enable/disable", "current limit"]
+    },
+    {
+      "id": "ti-pspice-for-ti",
+      "vendor": "Texas Instruments",
+      "family": "Analog and power PSpice model library",
+      "source_url": "https://www.ti.com/tool/PSPICE-FOR-TI",
+      "simulators": ["PSpice", "ngspice-compatibility-review-required"],
+      "status": "source-available-not-ingested",
+      "license_action": "Select the exact manufacturer part and download its model through the official TI workflow; do not scrape or redistribute the library.",
+      "validation_required": ["model syntax conversion", "pin mapping", "operating corners", "transient convergence"]
+    }
+  ]
+}

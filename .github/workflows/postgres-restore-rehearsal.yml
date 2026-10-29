@@ -1,0 +1,66 @@
+name: Postgres Restore Rehearsal
+on:
+  workflow_dispatch:
+    inputs:
+      backup_run_id:
+        description: 'Completed Scheduled Postgres Backup workflow run ID'
+        required: true
+        type: string
+      confirm_target:
+        description: 'Type RESTORE_REHEARSAL to confirm the target is non-production'
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+jobs:
+  restore-rehearsal:
+    if: inputs.confirm_target == 'RESTORE_REHEARSAL'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends curl ca-certificates postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+      - name: Install application dependencies
+        run: npm ci
+      - name: Download selected backup artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.backup_run_id }}
+        run: |
+          mkdir -p backups
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "circuitflow-postgres-backup-$RUN_ID" --dir backups
+          dump=$(find backups -type f -name '*.dump' | head -n 1)
+          test -n "$dump" && test -f "$dump"
+          sha256sum -c "$dump.sha256"
+          echo "BACKUP_FILE=$dump" >> "$GITHUB_ENV"
+      - name: Restore into explicitly non-production target
+        env:
+          DATABASE_URL: ${{ secrets.RESTORE_DATABASE_URL }}
+          BACKUP_FILE: ${{ env.BACKUP_FILE }}
+          CONFIRM_RESTORE: YES
+        run: |
+          test -n "$DATABASE_URL" || { echo 'RESTORE_DATABASE_URL repository secret is required'; exit 1; }
+          ./scripts/restore-postgres.sh
+      - name: Verify restored target
+        env:
+          DATABASE_URL: ${{ secrets.RESTORE_DATABASE_URL }}
+        run: |
+          node - <<'NODE'
+          const { Client } = require('pg');
+          (async () => {
+            const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+            await client.connect();
+            const result = await client.query('select count(*)::int as projects from projects');
+            console.log(JSON.stringify({ restore_check: 'passed', projects: result.rows[0].projects }));
+            await client.end();
+          })().catch((error) => { console.error(error.message); process.exit(1); });
+          NODE

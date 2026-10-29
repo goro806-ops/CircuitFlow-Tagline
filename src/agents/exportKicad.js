@@ -9,6 +9,38 @@ function esc(s) {
   return String(s || "").replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
 }
 
+function assessDesignReadiness(project) {
+  const components = project.schematic?.components || [];
+  const nets = project.schematic?.nets || [];
+  const warnings = [];
+  const errors = [];
+  for (const component of components) {
+    const ref = component.ref || "unknown";
+    const mpn = String(component.mpn || "").trim();
+    const footprint = String(component.footprint || "").trim();
+    if (!mpn || /^(tbd|various|generic|unknown)$/i.test(mpn)) {
+      warnings.push(`${ref}: manufacturer part number is missing or generic`);
+    }
+    if (!footprint || /^(tbd|module)$/i.test(footprint)) {
+      warnings.push(`${ref}: verified KiCad footprint is missing`);
+    }
+    if (!component.pins || Object.keys(component.pins).length === 0) {
+      warnings.push(`${ref}: pin mapping is incomplete`);
+    }
+  }
+  if (components.length === 0) warnings.push("No schematic components were supplied");
+  if (nets.length === 0) warnings.push("No electrical nets were supplied");
+  if ((project.pcb?.placements || []).length < components.length) {
+    errors.push("PCB placements do not cover all schematic components");
+  }
+  return {
+    status: errors.length ? "BLOCKED" : warnings.length ? "REVIEW_REQUIRED" : "READY_FOR_CLI_VALIDATION",
+    errors,
+    warnings,
+    production_ready: false
+  };
+}
+
 function generateKicadSchematic(project) {
   const sch = project.schematic;
   const components = sch?.components || [];
@@ -152,6 +184,7 @@ ${footprints}
  */
 function generateKicadProject(project) {
   const name = (project.project_id || "circuitflow").replace(/[^a-zA-Z0-9_-]/g, "_");
+  const readiness = assessDesignReadiness(project);
   return {
     name,
     files: {
@@ -167,9 +200,10 @@ function generateKicadProject(project) {
         2
       )
     },
+    readiness,
     notes: [
       "Open the .kicad_sch / .kicad_pcb in KiCad 6+",
-      "Footprints are placeholders – assign real ones from KiCad libraries",
+      "KiCad CLI validation is authoritative for ERC/DRC; this export is not production-ready until readiness warnings are closed",
       "Nets are documented in comments and netlist.json"
     ]
   };
@@ -178,5 +212,6 @@ function generateKicadProject(project) {
 module.exports = {
   generateKicadSchematic,
   generateKicadPcb,
-  generateKicadProject
+  generateKicadProject,
+  assessDesignReadiness
 };

@@ -14,11 +14,14 @@ function runCli(args, reportPath) {
   if (reportPath && fs.existsSync(reportPath)) {
     try { report = JSON.parse(fs.readFileSync(reportPath, 'utf8')); } catch (_) { report = null; }
   }
+  const stdout = String(result.stdout || '').trim();
+  const stderr = String(result.stderr || '').trim();
   return {
     available: true,
     status: result.status === 0 ? 'PASSED' : 'FAILED',
     exit_code: result.status,
-    report
+    report,
+    diagnostics: (stderr || stdout).slice(-4000) || null
   };
 }
 
