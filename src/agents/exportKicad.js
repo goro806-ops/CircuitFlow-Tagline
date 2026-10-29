@@ -89,7 +89,7 @@ function generateKicadPcb(project) {
     const rot = p.rotation || 0;
     const side = p.side === "bottom" ? "B.Cu" : "F.Cu";
     return `
-  (footprint "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm" (layer "${side}")
+  (footprint "CircuitFlow_Generated_SOIC8" (layer "${side}")
     (at ${p.x_mm || 10} ${p.y_mm || 10} ${rot})
     (attr smd)
     (fp_text reference "${esc(ref)}" (at 0 -2.5) (layer "F.SilkS")
