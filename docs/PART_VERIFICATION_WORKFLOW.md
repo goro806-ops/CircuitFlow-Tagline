@@ -29,3 +29,13 @@ This workflow prepares the final BOM for engineering and regulatory review. A ge
 ## Required completion rule
 
 Set `part_verification_complete: true` only after every BOM line has a complete record and the electrical reviewer has approved the evidence. Set `spice_model_provenance_complete: true` only after every used model has provenance/license evidence or an approved not-applicable rationale. These flags are enforced by the release gate; they are not self-certification.
+
+## Automated audit
+
+Run the audit against a project export, a JSON object containing `bom.line_items`, a JSON object containing `line_items`, or a raw JSON array:
+
+```bash
+npm run audit:bom -- ./project-export.json --json --output bom-audit.json
+```
+
+The report contains per-reference issues and warnings. Exit code `0` means no blocking component evidence was found; exit code `1` means the BOM cannot satisfy the manufacturer-part gate; exit code `2` means the input or command is invalid. A passing audit is only a verification-candidate result and still requires the named reviewer approval recorded in the evidence index.
