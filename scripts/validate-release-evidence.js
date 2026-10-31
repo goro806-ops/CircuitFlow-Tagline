@@ -11,6 +11,9 @@ const requiredFiles = [
   'docs/REGULATORY_EVIDENCE_INDEX.md',
   'docs/SAFETY_COMPLIANCE_TEST_PLAN.md',
   'docs/AUTOMATED_EVIDENCE_SNAPSHOT.md',
+  'docs/PART_VERIFICATION_WORKFLOW.md',
+  'docs/LAB_TEST_REQUEST_PACK.md',
+  'docs/REVIEWER_SIGNOFF_FORM.md',
   'docs/VALIDATION_MATRIX.md'
 ];
 const requiredSections = {
@@ -37,6 +40,18 @@ const requiredSections = {
   'docs/AUTOMATED_EVIDENCE_SNAPSHOT.md': [
     '## Automated results',
     '## Human gates still open'
+  ],
+  'docs/PART_VERIFICATION_WORKFLOW.md': [
+    '## Required record for every BOM line',
+    '## Required completion rule'
+  ],
+  'docs/LAB_TEST_REQUEST_PACK.md': [
+    '## 2. Request the laboratory to confirm',
+    '## 5. Evidence to obtain after testing'
+  ],
+  'docs/REVIEWER_SIGNOFF_FORM.md': [
+    '## Reviewer decision',
+    '## Reviewer attestations'
   ]
 };
 

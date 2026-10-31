@@ -315,6 +315,8 @@ router.post("/projects/:id/release-evidence", requireAuth, async (req, res) => {
     const allowed = [
       "design_warnings_resolved",
       "applicability_confirmed",
+      "part_verification_complete",
+      "spice_model_provenance_complete",
       "lab_reports_complete",
       "material_battery_complete",
       "user_docs_complete"

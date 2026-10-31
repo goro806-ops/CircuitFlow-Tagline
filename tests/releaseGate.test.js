@@ -23,6 +23,8 @@ const complete = {
   release_evidence: {
     design_warnings_resolved: true,
     applicability_confirmed: true,
+    part_verification_complete: true,
+    spice_model_provenance_complete: true,
     lab_reports_complete: true,
     material_battery_complete: true,
     user_docs_complete: true

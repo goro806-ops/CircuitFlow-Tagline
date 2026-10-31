@@ -71,3 +71,6 @@ Qualified authenticated reviewers can update only their owned project using `POS
 - [Regulatory Evidence Index](REGULATORY_EVIDENCE_INDEX.md)
 - [Safety Compliance Test Plan](SAFETY_COMPLIANCE_TEST_PLAN.md)
 - [Automated Evidence Snapshot](AUTOMATED_EVIDENCE_SNAPSHOT.md)
+- [Part Verification Workflow](PART_VERIFICATION_WORKFLOW.md)
+- [Laboratory Test Request Pack](LAB_TEST_REQUEST_PACK.md)
+- [Reviewer Sign-off Form](REVIEWER_SIGNOFF_FORM.md)

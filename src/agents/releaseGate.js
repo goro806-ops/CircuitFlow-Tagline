@@ -25,6 +25,8 @@ function evaluateReleaseReadiness(project = {}) {
   if (exportReadiness.pcb?.status !== 'PASSED') blockers.push('validation: KiCad PCB DRC is not recorded as passed for this project');
   if (exportReadiness.schematic?.status !== 'PASSED') blockers.push('validation: KiCad schematic ERC is not recorded as passed for this project');
   if (evidence.applicability_confirmed !== true) blockers.push('compliance: target markets and applicable requirements are not confirmed');
+  if (evidence.part_verification_complete !== true) blockers.push('bom: manufacturer part numbers, datasheets, lifecycle status, and footprints are not verified');
+  if (evidence.spice_model_provenance_complete !== true) blockers.push('simulation: vendor-model provenance and license records are not complete, or not-applicable rationale is missing');
   if (evidence.lab_reports_complete !== true) blockers.push('compliance: required laboratory reports are not recorded as complete');
   if (evidence.material_battery_complete !== true) blockers.push('compliance: material, battery, and transport evidence is not complete or marked not applicable');
   if (evidence.user_docs_complete !== true) blockers.push('compliance: user warnings, labels, and instructions are not approved');
