@@ -6,6 +6,8 @@ For every item, record an evidence ID or a written not-applicable rationale. A g
 
 The API endpoint `GET /api/agents/projects/:id/release-readiness` evaluates the recorded design validation, evidence flags, and named reviewer decisions. It returns `production_ready: false` until every required gate is complete. The endpoint is a control against premature release claims, not a certification authority.
 
+Qualified authenticated reviewers can update only their owned project using `POST /api/agents/projects/:id/release-evidence` and `POST /api/agents/projects/:id/release-signoff`. Both endpoints validate the allowed fields, record the authenticated user and timestamp in project history, and return the recalculated readiness result. Unauthenticated, anonymous, or cross-owner updates are rejected.
+
 ## 1. Requirements and architecture
 
 - [ ] Product requirements, operating modes, environmental limits, lifetime, and target cost are baselined.

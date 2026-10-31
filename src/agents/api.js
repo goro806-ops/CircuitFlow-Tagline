@@ -11,7 +11,8 @@ const {
   getGoogleAuthUrl,
   loginWithGoogleCode,
   isGoogleOAuthConfigured,
-  getGoogleRedirectUri
+  getGoogleRedirectUri,
+  requireAuth
 } = require("./auth");
 const store = require("./store");
 const { generateEnclosureStl } = require("./exportStl");
@@ -307,6 +308,55 @@ router.get("/projects/:id/release-readiness", async (req, res) => {
   }
 });
 
+router.post("/projects/:id/release-evidence", requireAuth, async (req, res) => {
+  try {
+    const project = await loadProjectOrThrow(req.params.id);
+    assertOwner(req, project);
+    const allowed = [
+      "design_warnings_resolved",
+      "applicability_confirmed",
+      "lab_reports_complete",
+      "material_battery_complete",
+      "user_docs_complete"
+    ];
+    const incoming = req.body || {};
+    const unknown = Object.keys(incoming).filter(key => !allowed.includes(key));
+    if (unknown.length) return res.status(400).json({ success: false, error: `Unsupported evidence fields: ${unknown.join(", ")}` });
+    if (Object.keys(incoming).length === 0) return res.status(400).json({ success: false, error: "At least one evidence field is required" });
+    for (const key of allowed) {
+      if (key in incoming && typeof incoming[key] !== "boolean") {
+        return res.status(400).json({ success: false, error: `${key} must be boolean` });
+      }
+    }
+    project.release_evidence = { ...(project.release_evidence || {}), ...incoming, updated_at: new Date().toISOString(), updated_by: req.user.user_id };
+    project.history = project.history || [];
+    project.history.push({ timestamp: new Date().toISOString(), agent: "ReleaseEvidenceReviewer", action: "release_evidence_updated", details: { fields: Object.keys(incoming), updated_by: req.user.user_id } });
+    await store.saveProject(project);
+    res.json({ success: true, project_id: project.project_id, release_evidence: project.release_evidence, readiness: evaluateReleaseReadiness(project) });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/projects/:id/release-signoff", requireAuth, async (req, res) => {
+  try {
+    const project = await loadProjectOrThrow(req.params.id);
+    assertOwner(req, project);
+    const { role, name, evidence, decision } = req.body || {};
+    const roles = ["electrical_engineer", "firmware_engineer", "mechanical_dfa_engineer", "manufacturing_test_engineer", "safety_regulatory_reviewer", "product_owner"];
+    if (!roles.includes(role)) return res.status(400).json({ success: false, error: `role must be one of: ${roles.join(", ")}` });
+    if (decision !== "approved" && decision !== "rejected") return res.status(400).json({ success: false, error: "decision must be approved or rejected" });
+    if (!String(name || "").trim() || !String(evidence || "").trim()) return res.status(400).json({ success: false, error: "name and evidence are required" });
+    project.release_signoff = { ...(project.release_signoff || {}), [role]: { name: String(name).trim().slice(0, 160), evidence: String(evidence).trim().slice(0, 500), decision, signed_at: new Date().toISOString(), signed_by: req.user.user_id } };
+    project.history = project.history || [];
+    project.history.push({ timestamp: new Date().toISOString(), agent: "ReleaseSignoffReviewer", action: "release_signoff_updated", details: { role, decision, signed_by: req.user.user_id } });
+    await store.saveProject(project);
+    res.json({ success: true, project_id: project.project_id, role, release_signoff: project.release_signoff, readiness: evaluateReleaseReadiness(project) });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
 router.post("/projects/:id/review", async (req, res) => {
   try {
     const { decision, comments, reviewed_by } = req.body || {};
@@ -315,6 +365,8 @@ router.post("/projects/:id/review", async (req, res) => {
       return res.status(400).json({ success: false, error: `decision must be one of: ${allowed.join(", ")}` });
     }
     const project = await loadProjectOrThrow(req.params.id);
+    assertOwner(req, project);
+    if (!req.user) return res.status(401).json({ success: false, error: "Authentication required for human review" });
     if (!project.escalation) {
       project.escalation = {
         project_id: project.project_id,

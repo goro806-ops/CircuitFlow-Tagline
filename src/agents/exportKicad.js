@@ -33,8 +33,28 @@ function assessDesignReadiness(project) {
   }
   if (components.length === 0) warnings.push("No schematic components were supplied");
   if (nets.length === 0) warnings.push("No electrical nets were supplied");
-  if ((project.pcb?.placements || []).length < components.length) {
-    errors.push("PCB placements do not cover all schematic components");
+  const placements = project.pcb?.placements || [];
+  const componentRefs = new Set(components.map(component => component.ref).filter(Boolean));
+  const placementRefs = placements.map(placement => placement.ref).filter(Boolean);
+  const missingPlacements = [...componentRefs].filter(ref => !placementRefs.includes(ref));
+  const duplicatePlacements = [...new Set(placementRefs.filter((ref, index) => placementRefs.indexOf(ref) !== index))];
+  if (missingPlacements.length) {
+    errors.push(`PCB placements missing for: ${missingPlacements.join(", ")}`);
+  }
+  if (duplicatePlacements.length) {
+    errors.push(`PCB placements duplicated for: ${duplicatePlacements.join(", ")}`);
+  }
+  if (!components.length && placements.length) {
+    errors.push("PCB placements exist without schematic components");
+  }
+  const knownPins = new Set();
+  for (const component of components) {
+    for (const pin of Object.keys(component.pins || {})) knownPins.add(`${component.ref}.${pin}`);
+  }
+  for (const net of nets) {
+    for (const endpoint of net.connected || []) {
+      if (knownPins.size && !knownPins.has(endpoint)) warnings.push(`Net ${net.name || "unnamed"}: unresolved endpoint ${endpoint}`);
+    }
   }
   return {
     status: errors.length ? "BLOCKED" : warnings.length ? "REVIEW_REQUIRED" : "READY_FOR_CLI_VALIDATION",

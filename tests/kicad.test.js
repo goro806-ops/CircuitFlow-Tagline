@@ -16,6 +16,7 @@ const readiness = assessDesignReadiness({
 });
 assert.strictEqual(readiness.status, 'BLOCKED');
 assert.ok(readiness.errors.length > 0);
+assert.ok(readiness.errors.some(error => error.includes('PCB placements missing for: U1')));
 assert.ok(readiness.warnings.length > 0);
 
 console.log('KiCad structural validation passed.');
