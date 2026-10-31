@@ -108,14 +108,13 @@ function runPCBLayoutAgent(project) {
   const step = isWearable ? 7 : 10;
   components.forEach(c => {
     if (placedRefs.has(c.ref)) return;
-    if (c.category === "Passive") return;
     placements.push({
       ref: c.ref,
       x_mm: gridX,
       y_mm: gridY,
       rotation: 0,
       side: "top",
-      notes: "Auto grid placement"
+      notes: c.category === "Passive" ? "Auto grid placement; review decoupling and return paths" : "Auto grid placement"
     });
     gridX += step;
     if (gridX > widthMm - 5) {
