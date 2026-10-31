@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node tests/engine.test.js && node tests/health.test.js && node tests/auth.test.js && node tests/spice.test.js && node tests/kicad.test.js",
+    "test": "node tests/engine.test.js && node tests/health.test.js && node tests/auth.test.js && node tests/spice.test.js && node tests/kicad.test.js && node tests/releaseGate.test.js",
     "test:agents": "node tests/agents.smoke.test.js",
     "test:evidence": "node scripts/validate-release-evidence.js",
     "agents": "node src/agents/run.js",

@@ -17,6 +17,7 @@ const store = require("./store");
 const { generateEnclosureStl } = require("./exportStl");
 const { generateKicadProject } = require("./exportKicad");
 const { validateKicadBundle } = require("../engine/kicadCli");
+const { evaluateReleaseReadiness } = require("./releaseGate");
 
 const router = express.Router();
 
@@ -285,6 +286,22 @@ router.get("/projects/:id/kicad.pcb", async (req, res) => {
     res.setHeader("Content-Type", "text/plain");
     res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
     res.send(bundle.files[name]);
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.get("/projects/:id/release-readiness", async (req, res) => {
+  try {
+    const project = await loadProjectOrThrow(req.params.id);
+    assertOwner(req, project);
+    const readiness = evaluateReleaseReadiness(project);
+    res.json({
+      success: true,
+      project_id: project.project_id,
+      ...readiness,
+      note: "This endpoint evaluates evidence and recorded human decisions; it does not certify or authorize a product."
+    });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }

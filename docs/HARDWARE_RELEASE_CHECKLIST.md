@@ -4,6 +4,8 @@ This checklist is the release gate for any CircuitFlow-generated design. Generat
 
 For every item, record an evidence ID or a written not-applicable rationale. A green automated check is not a safety approval, regulatory authorization, or manufacturing release.
 
+The API endpoint `GET /api/agents/projects/:id/release-readiness` evaluates the recorded design validation, evidence flags, and named reviewer decisions. It returns `production_ready: false` until every required gate is complete. The endpoint is a control against premature release claims, not a certification authority.
+
 ## 1. Requirements and architecture
 
 - [ ] Product requirements, operating modes, environmental limits, lifetime, and target cost are baselined.
