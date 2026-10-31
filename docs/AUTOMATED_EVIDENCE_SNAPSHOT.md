@@ -3,7 +3,7 @@
 **Snapshot date:** 2026-10-29  
 **Application version:** 1.10.0  
 **Live service:** `circuitflow-docker.onrender.com`  
-**Live build:** `555c73131855418450dd1330ac61954bf16e777d`
+**Live build:** `73ef02fb9ca1a3ee76c99c23e06086e6e36b53a9`
 
 This snapshot records automated engineering checks only. It is not a safety certificate, regulatory authorization, Declaration of Conformity, FCC authorization, or production-release approval. The KiCad result below is for the disposable generated validation project and does not prove that an unreviewed customer design is safe or market-compliant.
 
@@ -13,10 +13,11 @@ This snapshot records automated engineering checks only. It is not a safety cert
 |---|---|---|---|
 | AUTO-001 | Local application test suite | PASS | Engine, health, authentication, SPICE, and KiCad structural tests passed. |
 | AUTO-002 | Release-evidence package validator | PASS | Required files/sections present; human sign-off remains required. |
-| AUTO-003 | GitHub Actions release-evidence workflow | PASS | Workflow run for commit `555c731` passed. |
+| AUTO-003 | GitHub Actions release-evidence workflow | PASS | Latest recorded release-evidence workflow run passed; the workflow is path-triggered for evidence-package changes. |
 | AUTO-004 | Render readiness | PASS | Live service reports PostgreSQL-backed store and readiness true. |
 | AUTO-005 | Live KiCad CLI validation | PASS | Disposable generated project: PCB DRC 0 violations, 0 unconnected pads; schematic ERC 0 errors and 0 warnings. |
 | AUTO-006 | Live ngspice simulation | PASS | `ngspice`, `CONVERGED`, analytical fallback false for the submitted voltage-divider request. |
+| AUTO-007 | Fresh generated-project placement coverage | PASS | Disposable project `proj_mvwjheaaj7jg02`: 13 schematic components, 13 PCB placements, no missing or duplicate references. |
 
 ## Interpretation
 
