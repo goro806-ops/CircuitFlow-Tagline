@@ -45,7 +45,9 @@ const complete = {
   release_signoff: Object.fromEntries(REQUIRED_REVIEW_ROLES.map(role => [role, {
     name: `Reviewer for ${role}`,
     evidence: `EVID-${role}`,
-    decision: 'approved'
+    decision: 'approved',
+    conflict_disclosed: true,
+    reviewed_revision: 'PCB-A-001/BOM-001'
   }]))
 };
 const ready = evaluateReleaseReadiness(complete);

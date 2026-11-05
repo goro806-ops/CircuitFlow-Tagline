@@ -37,4 +37,4 @@ Each reviewer should state which artifacts were reviewed, identify open deviatio
 
 ## Release decision record
 
-The product owner may record a release decision only after every applicable role has approved, all required evidence is indexed, and open deviations have documented disposition. The API release gate requires a reviewer name, `approved` decision, and evidence reference for each role. This form itself does not grant legal authorization or replace a required declaration, laboratory report, or regulatory filing.
+The product owner may record a release decision only after every applicable role has approved, all required evidence is indexed, and open deviations have documented disposition. The API release gate requires a reviewer name, `approved` decision, evidence reference, explicit `conflict_disclosed: true|false`, and the exact frozen `reviewed_revision` for each role. A reviewer must submit `conflict_disclosed` even when no conflict exists. This form itself does not grant legal authorization or replace a required declaration, laboratory report, or regulatory filing.

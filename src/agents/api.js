@@ -333,6 +333,8 @@ router.post("/projects/:id/release-evidence", requireAuth, async (req, res) => {
       "applicability_confirmed",
       "part_verification_complete",
       "spice_model_provenance_complete",
+      "spice_model_not_applicable",
+      "spice_model_not_applicable_rationale",
       "lab_reports_complete",
       "material_battery_complete",
       "user_docs_complete"
@@ -342,8 +344,11 @@ router.post("/projects/:id/release-evidence", requireAuth, async (req, res) => {
     if (unknown.length) return res.status(400).json({ success: false, error: `Unsupported evidence fields: ${unknown.join(", ")}` });
     if (Object.keys(incoming).length === 0) return res.status(400).json({ success: false, error: "At least one evidence field is required" });
     for (const key of allowed) {
-      if (key in incoming && typeof incoming[key] !== "boolean") {
+      if (key in incoming && !["spice_model_not_applicable_rationale"].includes(key) && typeof incoming[key] !== "boolean") {
         return res.status(400).json({ success: false, error: `${key} must be boolean` });
+      }
+      if (key === "spice_model_not_applicable_rationale" && (typeof incoming[key] !== "string" || !incoming[key].trim())) {
+        return res.status(400).json({ success: false, error: "spice_model_not_applicable_rationale must be a non-empty string" });
       }
     }
     project.release_evidence = { ...(project.release_evidence || {}), ...incoming, updated_at: new Date().toISOString(), updated_by: req.user.user_id };
@@ -360,12 +365,13 @@ router.post("/projects/:id/release-signoff", requireAuth, async (req, res) => {
   try {
     const project = await loadProjectOrThrow(req.params.id);
     assertOwner(req, project);
-    const { role, name, evidence, decision } = req.body || {};
+    const { role, name, evidence, decision, conflict_disclosed, reviewed_revision } = req.body || {};
     const roles = ["electrical_engineer", "firmware_engineer", "mechanical_dfa_engineer", "manufacturing_test_engineer", "safety_regulatory_reviewer", "product_owner"];
     if (!roles.includes(role)) return res.status(400).json({ success: false, error: `role must be one of: ${roles.join(", ")}` });
     if (decision !== "approved" && decision !== "rejected") return res.status(400).json({ success: false, error: "decision must be approved or rejected" });
-    if (!String(name || "").trim() || !String(evidence || "").trim()) return res.status(400).json({ success: false, error: "name and evidence are required" });
-    project.release_signoff = { ...(project.release_signoff || {}), [role]: { name: String(name).trim().slice(0, 160), evidence: String(evidence).trim().slice(0, 500), decision, signed_at: new Date().toISOString(), signed_by: req.user.user_id } };
+    if (!String(name || "").trim() || !String(evidence || "").trim() || !String(reviewed_revision || "").trim()) return res.status(400).json({ success: false, error: "name, evidence, and reviewed_revision are required" });
+    if (typeof conflict_disclosed !== "boolean") return res.status(400).json({ success: false, error: "conflict_disclosed must be boolean" });
+    project.release_signoff = { ...(project.release_signoff || {}), [role]: { name: String(name).trim().slice(0, 160), evidence: String(evidence).trim().slice(0, 500), decision, conflict_disclosed, reviewed_revision: String(reviewed_revision).trim().slice(0, 160), signed_at: new Date().toISOString(), signed_by: req.user.user_id } };
     project.history = project.history || [];
     project.history.push({ timestamp: new Date().toISOString(), agent: "ReleaseSignoffReviewer", action: "release_signoff_updated", details: { role, decision, signed_by: req.user.user_id } });
     await store.saveProject(project);

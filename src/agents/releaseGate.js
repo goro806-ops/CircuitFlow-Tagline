@@ -43,8 +43,8 @@ function evaluateReleaseReadiness(project = {}) {
 
   for (const role of REQUIRED_REVIEW_ROLES) {
     const entry = signoff[role];
-    if (!entry || entry.decision !== 'approved' || !entry.name || !entry.evidence) {
-      blockers.push(`human sign-off: ${role} requires an approver, approved decision, and evidence link`);
+    if (!entry || entry.decision !== 'approved' || !entry.name || !entry.evidence || entry.conflict_disclosed !== true || !entry.reviewed_revision) {
+      blockers.push(`human sign-off: ${role} requires an approver, approved decision, evidence link, conflict disclosure, and reviewed release revision`);
     }
   }
 
