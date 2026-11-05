@@ -8,6 +8,8 @@ The API endpoint `GET /api/agents/projects/:id/release-readiness` evaluates the 
 
 Qualified authenticated reviewers can update only their owned project using `POST /api/agents/projects/:id/release-evidence` and `POST /api/agents/projects/:id/release-signoff`. Both endpoints validate the allowed fields, record the authenticated user and timestamp in project history, and return the recalculated readiness result. Unauthenticated, anonymous, or cross-owner updates are rejected.
 
+The automated BOM audit is also available in Render at `GET /api/agents/projects/:id/bom-audit`. It returns the per-component manufacturer, MPN, datasheet, package, footprint, lifecycle, evidence, ratings, and SPICE-model findings without exposing environment secrets. A passing audit remains an engineering evidence result, not manufacturer approval or regulatory certification.
+
 ## 1. Requirements and architecture
 
 - [ ] Product requirements, operating modes, environmental limits, lifetime, and target cost are baselined.

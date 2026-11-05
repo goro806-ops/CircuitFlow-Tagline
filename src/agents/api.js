@@ -19,6 +19,7 @@ const { generateEnclosureStl } = require("./exportStl");
 const { generateKicadProject } = require("./exportKicad");
 const { validateKicadBundle } = require("../engine/kicadCli");
 const { evaluateReleaseReadiness } = require("./releaseGate");
+const { auditBom } = require("./bomVerification");
 
 const router = express.Router();
 
@@ -302,6 +303,21 @@ router.get("/projects/:id/release-readiness", async (req, res) => {
       project_id: project.project_id,
       ...readiness,
       note: "This endpoint evaluates evidence and recorded human decisions; it does not certify or authorize a product."
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.get("/projects/:id/bom-audit", async (req, res) => {
+  try {
+    const project = await loadProjectOrThrow(req.params.id);
+    assertOwner(req, project);
+    res.json({
+      success: true,
+      project_id: project.project_id,
+      audit: auditBom(project),
+      note: "This is an evidence audit. A passing result is not manufacturer approval or regulatory certification."
     });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
