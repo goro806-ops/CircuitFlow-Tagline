@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const registryPath = path.join(__dirname, '..', '..', 'models', 'spice', 'registry.json');
 const PLACEHOLDER = /^(?:tbd|to[-_ ]?be[-_ ]?determined|generic|unknown|n\/a|na|pending|not[-_ ]?ingested|source[-_ ]?available[-_ ]?not[-_ ]?ingested)$/i;
@@ -20,6 +21,15 @@ function getVendorModel(id) {
 
 function present(value) {
   return value !== undefined && value !== null && String(value).trim() !== '' && !PLACEHOLDER.test(String(value).trim());
+}
+
+function fileSha256(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function isWithinRoot(filePath, root) {
+  const relative = path.relative(path.resolve(root), path.resolve(filePath));
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
 function collectModelReferences(project = {}) {
@@ -70,6 +80,16 @@ function auditVendorModels(project = {}) {
     }
     if (model.source_url && !/^https:\/\/[^\s]+$/i.test(String(model.source_url))) issues.push('source URL must use HTTPS');
     if (!/^[a-f0-9]{64}$/i.test(String(model.sha256 || ''))) issues.push('artifact SHA-256 is missing or invalid');
+    if (present(model.artifact_path)) {
+      try {
+        const modelRoot = process.env.SPICE_MODEL_ROOT || '/var/lib/circuitflow/spice';
+        if (!isWithinRoot(model.artifact_path, modelRoot)) issues.push('private artifact path is outside the configured model volume');
+        if (!fs.statSync(model.artifact_path).isFile()) issues.push('private artifact path is not a regular file');
+        else if (fileSha256(model.artifact_path).toLowerCase() !== String(model.sha256).toLowerCase()) issues.push('private artifact SHA-256 does not match the recorded digest');
+      } catch (error) {
+        issues.push('private model artifact is not accessible in the configured model volume');
+      }
+    }
     if (model.pin_map_verified !== true) issues.push('pin-map verification is not approved');
     if (!Array.isArray(model.validation_evidence) || model.validation_evidence.length === 0) {
       issues.push('model-specific validation evidence is missing');

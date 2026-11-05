@@ -14,6 +14,24 @@ This directory contains metadata only. Vendor macromodels are intentionally not 
 
 The release gate audits every referenced model. A private model record must include the approved registry `id`, official `source_url`, `license_status`, `dialect`, verified `pin_order`, private `artifact_path`, 64-character `sha256`, `validation_evidence_id`, `pin_map_verified: true`, and a non-empty `validation_evidence` array. Registry entries remain blocked until their status is `private-ingested-validated`. If a project intentionally uses no vendor model, record `spice_model_not_applicable: true` together with a specific `spice_model_not_applicable_rationale`; the generic provenance-complete flag alone is insufficient.
 
+## Private ingestion
+
+Use the repository utility only on a trusted operator machine or deployment job with the private model volume mounted:
+
+```bash
+SPICE_MODEL_ROOT=/var/lib/circuitflow/spice \
+npm run ingest:spice -- \
+  --file /secure/inbox/vendor-model.lib \
+  --id exact-registry-id \
+  --source-url https://vendor.example/product-model \
+  --license-status private-use-approved \
+  --dialect ngspice \
+  --pin-order "1=VIN,2=GND,3=VOUT" \
+  --validation-evidence-id SPICE-001
+```
+
+The utility copies the model into a per-ID directory with restrictive permissions, computes SHA-256, and writes a metadata manifest. It never prints model contents or stores them in Git. The project’s model reference must then use the generated `artifact_path` and `sha256`; the release audit checks that the file is accessible and the digest matches. Do not put licensed model text in environment variables, API requests, application logs, or repository files.
+
 A vendor macromodel is not a substitute for datasheet limits, tolerance analysis, thermal characterization, bench correlation, or regulatory review. For example, the Renesas RAA214023 documentation states that its model uses typical room-temperature parameters and does not model thermal effects, process variation, part-to-part variation, or package differences. Those limitations must remain visible in the release record.
 
 The initial registry covers official model sources from ROHM, Renesas, and Texas Instruments. See `registry.json` for the machine-readable catalog.
