@@ -11,8 +11,19 @@ assert.ok(blocked.blockers.some(item => item.includes('human sign-off')));
 assert.ok(blocked.blockers.some(item => item.includes('target markets')));
 
 const complete = {
+  bom: { line_items: [{
+    ref: 'U1',
+    category: 'MCU',
+    manufacturer: 'Example Semiconductor',
+    mpn: 'ABC-123',
+    datasheet_url: 'https://vendor.example/ABC-123.pdf',
+    package: 'QFN-16',
+    footprint: 'Vendor:QFN-16_3x3mm_P0.5mm',
+    lifecycle_status: 'active',
+    verification_evidence_id: 'BOM-001'
+  }] },
   schematic: {
-    components: [{ ref: 'U1', mpn: 'ABC-123', footprint: 'Generated_Footprint', pins: { '1': 'VCC' } }],
+    components: [{ ref: 'U1', mpn: 'ABC-123', footprint: 'Vendor:QFN-16_3x3mm_P0.5mm', pins: { '1': 'VCC' } }],
     nets: [{ name: 'VCC', connected: ['U1.1'] }]
   },
   pcb: { placements: [{ ref: 'U1', x_mm: 10, y_mm: 10 }] },
