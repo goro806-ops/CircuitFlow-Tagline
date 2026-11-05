@@ -12,6 +12,8 @@ This directory contains metadata only. Vendor macromodels are intentionally not 
 6. Run a model-specific validation deck for DC operating point, load/transient behavior, current limit, dropout, enable/disable, and temperature corners where supported.
 7. Attach the model provenance and known limitations to the project release artifact.
 
+The release gate audits every referenced model. A private model record must include the approved registry `id`, official `source_url`, `license_status`, `dialect`, verified `pin_order`, private `artifact_path`, 64-character `sha256`, `validation_evidence_id`, `pin_map_verified: true`, and a non-empty `validation_evidence` array. Registry entries remain blocked until their status is `private-ingested-validated`. If a project intentionally uses no vendor model, record `spice_model_not_applicable: true` together with a specific `spice_model_not_applicable_rationale`; the generic provenance-complete flag alone is insufficient.
+
 A vendor macromodel is not a substitute for datasheet limits, tolerance analysis, thermal characterization, bench correlation, or regulatory review. For example, the Renesas RAA214023 documentation states that its model uses typical room-temperature parameters and does not model thermal effects, process variation, part-to-part variation, or package differences. Those limitations must remain visible in the release record.
 
 The initial registry covers official model sources from ROHM, Renesas, and Texas Instruments. See `registry.json` for the machine-readable catalog.

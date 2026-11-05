@@ -36,6 +36,8 @@ const complete = {
     applicability_confirmed: true,
     part_verification_complete: true,
     spice_model_provenance_complete: true,
+    spice_model_not_applicable: true,
+    spice_model_not_applicable_rationale: 'No vendor macromodel is used in this validated fixture; analytical checks are documented.',
     lab_reports_complete: true,
     material_battery_complete: true,
     user_docs_complete: true

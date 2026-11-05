@@ -2,6 +2,7 @@
 
 const { assessDesignReadiness } = require('./exportKicad');
 const { auditBom } = require('./bomVerification');
+const { auditVendorModels } = require('../engine/vendorModels');
 
 const REQUIRED_REVIEW_ROLES = [
   'electrical_engineer',
@@ -19,6 +20,7 @@ function evaluateReleaseReadiness(project = {}) {
   const signoff = project.release_signoff || {};
   const evidence = project.release_evidence || {};
   const bomAudit = auditBom(project);
+  const spiceAudit = auditVendorModels(project);
 
   if (design.errors.length) blockers.push(...design.errors.map(message => `design: ${message}`));
   if (design.warnings.length && evidence.design_warnings_resolved !== true) {
@@ -26,6 +28,9 @@ function evaluateReleaseReadiness(project = {}) {
   }
   if (!bomAudit.verified) {
     blockers.push(...bomAudit.blockers.map(message => `bom: ${message}`));
+  }
+  if (!spiceAudit.verified) {
+    blockers.push(...spiceAudit.blockers.map(message => `simulation: ${message}`));
   }
   if (exportReadiness.pcb?.status !== 'PASSED') blockers.push('validation: KiCad PCB DRC is not recorded as passed for this project');
   if (exportReadiness.schematic?.status !== 'PASSED') blockers.push('validation: KiCad schematic ERC is not recorded as passed for this project');
@@ -49,7 +54,8 @@ function evaluateReleaseReadiness(project = {}) {
     blockers,
     required_review_roles: REQUIRED_REVIEW_ROLES,
     automated_design_assessment: design,
-    automated_bom_audit: bomAudit
+    automated_bom_audit: bomAudit,
+    automated_spice_model_audit: spiceAudit
   };
 }
 
