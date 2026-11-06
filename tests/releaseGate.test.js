@@ -23,7 +23,11 @@ const complete = {
     verification_evidence_id: 'BOM-001'
   }] },
   schematic: {
-    components: [{ ref: 'U1', mpn: 'ABC-123', footprint: 'Vendor:QFN-16_3x3mm_P0.5mm', pins: { '1': 'VCC' } }],
+    components: [{
+      ref: 'U1', mpn: 'ABC-123', footprint: 'Vendor:QFN-16_3x3mm_P0.5mm', footprint_verified: true,
+      symbol_library_id: 'Vendor_MCU:ABC-123', symbol_name: 'ABC-123', pin_map_verified: true,
+      pins: { '1': 'VCC' }
+    }],
     nets: [{ name: 'VCC', connected: ['U1.1'] }]
   },
   pcb: { placements: [{ ref: 'U1', x_mm: 10, y_mm: 10 }] },

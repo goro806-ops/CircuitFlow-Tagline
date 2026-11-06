@@ -18,17 +18,22 @@ function assessDesignReadiness(project) {
     const ref = component.ref || "unknown";
     const mpn = String(component.mpn || "").trim();
     const footprint = String(component.footprint || "").trim();
+    const symbolLibraryId = String(component.symbol_library_id || component.symbol_lib_id || "").trim();
+    const symbolName = String(component.symbol_name || component.symbol || "").trim();
     if (!mpn || /^(tbd|various|generic|unknown)$/i.test(mpn)) {
       warnings.push(`${ref}: manufacturer part number is missing or generic`);
     }
-    if (!footprint || /^(tbd|module)$/i.test(footprint)) {
+    if (!footprint || /^(tbd|module|circuitflow_generated_soic8)$/i.test(footprint) || component.footprint_verified !== true) {
       warnings.push(`${ref}: verified KiCad footprint is missing`);
     }
-    if (!component.pins || Object.keys(component.pins).length === 0) {
+    if (!symbolLibraryId || !symbolName) {
+      warnings.push(`${ref}: verified KiCad symbol library assignment is missing`);
+    }
+    if (!component.pins || Object.keys(component.pins).length === 0 || component.pin_map_verified !== true) {
       warnings.push(`${ref}: pin mapping is incomplete`);
     }
   }
-  if (components.length) {
+  if (components.length && components.some(component => component.footprint_verified !== true || component.pin_map_verified !== true || !component.symbol_library_id || !component.symbol_name)) {
     warnings.push("Schematic export is netlist-only until verified KiCad symbols and pin mappings are assigned");
   }
   if (components.length === 0) warnings.push("No schematic components were supplied");
@@ -95,6 +100,7 @@ function generateKicadPcb(project) {
   const h = pcb.outline?.height_mm || 30;
   const layers = pcb.layers || 2;
   const placements = pcb.placements || [];
+  const componentsByRef = new Map((project.schematic?.components || []).map(component => [component.ref, component]));
   const date = new Date().toISOString().slice(0, 10);
 
   // Board outline (Edge.Cuts)
@@ -108,8 +114,12 @@ function generateKicadPcb(project) {
     const ref = p.ref || `U${i + 1}`;
     const rot = p.rotation || 0;
     const side = p.side === "bottom" ? "B.Cu" : "F.Cu";
+    const component = componentsByRef.get(ref) || {};
+    const footprintName = component.footprint_verified === true && component.footprint
+      ? component.footprint
+      : "CircuitFlow_Generated_SOIC8";
     return `
-  (footprint "CircuitFlow_Generated_SOIC8" (layer "${side}")
+  (footprint "${esc(footprintName)}" (layer "${side}")
     (at ${p.x_mm || 10} ${p.y_mm || 10} ${rot})
     (attr smd)
     (fp_text reference "${esc(ref)}" (at 0 -2.5) (layer "F.SilkS")
