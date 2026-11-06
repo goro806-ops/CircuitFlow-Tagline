@@ -14,7 +14,7 @@ This form is for a qualified reviewer who has actually examined the frozen relea
 | Target markets | ______________________________ |
 | Review date | ______________________________ |
 
-The readiness endpoint returns a SHA-256 `release_revision` fingerprint for the frozen architecture, BOM, schematic, PCB, firmware, enclosure, KiCad validation, SPICE references, and release evidence. Copy that exact value into every sign-off request as `reviewed_revision`. Any subsequent change to those release inputs produces a new fingerprint and automatically makes earlier approvals stale.
+The readiness endpoint returns a SHA-256 `release_revision` fingerprint for the frozen architecture, BOM, schematic, PCB, firmware, enclosure, KiCad validation, SPICE references, and release evidence. Copy that exact value into every sign-off request as `reviewed_revision`. Any subsequent change to those release inputs produces a new fingerprint and automatically makes earlier approvals stale. The API also records the authenticated account as `signed_by` and the server timestamp as `signed_at`; both are required by the release gate and cannot be supplied by the request body.
 
 ## Reviewer decision
 

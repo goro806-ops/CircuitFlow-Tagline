@@ -53,7 +53,9 @@ complete.release_signoff = Object.fromEntries(REQUIRED_REVIEW_ROLES.map(role => 
   evidence: `EVID-${role}`,
   decision: 'approved',
   conflict_disclosed: true,
-  reviewed_revision: releaseFingerprint(complete)
+  reviewed_revision: releaseFingerprint(complete),
+  signed_by: `usr-${role}`,
+  signed_at: '2026-11-06T00:00:00.000Z'
 }]));
 const ready = evaluateReleaseReadiness(complete);
 assert.strictEqual(ready.production_ready, true);
@@ -64,5 +66,10 @@ changed.bom.line_items[0].mpn = 'ABC-124';
 const stale = evaluateReleaseReadiness(changed);
 assert.notStrictEqual(stale.release_revision, ready.release_revision);
 assert.ok(stale.blockers.some(item => item.includes('reviewed revision matching')));
+
+const unaudited = JSON.parse(JSON.stringify(complete));
+delete unaudited.release_signoff.electrical_engineer.signed_by;
+const unauditedResult = evaluateReleaseReadiness(unaudited);
+assert.ok(unauditedResult.blockers.some(item => item.includes('authenticated reviewer identity')));
 
 console.log('Release readiness gate tests passed.');
