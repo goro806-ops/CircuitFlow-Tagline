@@ -26,7 +26,7 @@ RESTORE_TARGET_NAME=staging-restore-rehearsal \
 ./scripts/restore-postgres.sh
 ```
 
-Before restoring, stop or drain design-run traffic and confirm the target database. The restore script refuses to run without both explicit confirmation and a non-production target name. After restoring, run `DATABASE_URL='postgresql://target...' npm run verify:restore`; it checks the CircuitFlow tables, hashed authentication records, project JSON reload, and LangGraph checkpoint tables without printing user or secret data. Then verify `/health`, `/ready`, `/api/agents/status`, authentication, project listing, one project reload, and one small design smoke test. Keep the previous Render deployment available for rollback until these checks pass.
+Before restoring, stop or drain design-run traffic and confirm the target database. The restore script refuses to run without explicit confirmation, a non-production target name, and a database URL that does not appear production-like; it never prints the URL. After restoring, run `DATABASE_URL='postgresql://target...' npm run verify:restore`; it checks the CircuitFlow tables, hashed authentication records, project JSON reload, and LangGraph checkpoint tables without printing user or secret data. Then verify `/health`, `/ready`, `/api/agents/status`, authentication, project listing, one project reload, and one small design smoke test. Keep the previous Render deployment available for rollback until these checks pass.
 
 ## Current limitation
 
