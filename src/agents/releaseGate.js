@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const { assessDesignReadiness } = require('./exportKicad');
 const { auditBom } = require('./bomVerification');
 const { auditVendorModels } = require('../engine/vendorModels');
@@ -13,6 +14,32 @@ const REQUIRED_REVIEW_ROLES = [
   'product_owner'
 ];
 
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce((result, key) => {
+      result[key] = canonicalize(value[key]);
+      return result;
+    }, {});
+  }
+  return value;
+}
+
+function releaseFingerprint(project = {}) {
+  const releaseState = {
+    architecture: project.architecture || null,
+    bom: project.bom || null,
+    schematic: project.schematic || null,
+    pcb: project.pcb || null,
+    firmware: project.firmware || null,
+    enclosure: project.enclosure || null,
+    kicad_validation: project.kicad_validation || null,
+    release_evidence: project.release_evidence || null,
+    spice_models: project.spice_models || project.spiceModels || null
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(canonicalize(releaseState))).digest('hex');
+}
+
 function evaluateReleaseReadiness(project = {}) {
   const blockers = [];
   const design = assessDesignReadiness(project);
@@ -21,17 +48,14 @@ function evaluateReleaseReadiness(project = {}) {
   const evidence = project.release_evidence || {};
   const bomAudit = auditBom(project);
   const spiceAudit = auditVendorModels(project);
+  const release_revision = releaseFingerprint(project);
 
   if (design.errors.length) blockers.push(...design.errors.map(message => `design: ${message}`));
   if (design.warnings.length && evidence.design_warnings_resolved !== true) {
     blockers.push(...design.warnings.map(message => `design: ${message}`));
   }
-  if (!bomAudit.verified) {
-    blockers.push(...bomAudit.blockers.map(message => `bom: ${message}`));
-  }
-  if (!spiceAudit.verified) {
-    blockers.push(...spiceAudit.blockers.map(message => `simulation: ${message}`));
-  }
+  if (!bomAudit.verified) blockers.push(...bomAudit.blockers.map(message => `bom: ${message}`));
+  if (!spiceAudit.verified) blockers.push(...spiceAudit.blockers.map(message => `simulation: ${message}`));
   if (exportReadiness.pcb?.status !== 'PASSED') blockers.push('validation: KiCad PCB DRC is not recorded as passed for this project');
   if (exportReadiness.schematic?.status !== 'PASSED') blockers.push('validation: KiCad schematic ERC is not recorded as passed for this project');
   if (evidence.applicability_confirmed !== true) blockers.push('compliance: target markets and applicable requirements are not confirmed');
@@ -43,8 +67,8 @@ function evaluateReleaseReadiness(project = {}) {
 
   for (const role of REQUIRED_REVIEW_ROLES) {
     const entry = signoff[role];
-    if (!entry || entry.decision !== 'approved' || !entry.name || !entry.evidence || entry.conflict_disclosed !== true || !entry.reviewed_revision) {
-      blockers.push(`human sign-off: ${role} requires an approver, approved decision, evidence link, conflict disclosure, and reviewed release revision`);
+    if (!entry || entry.decision !== 'approved' || !entry.name || !entry.evidence || entry.conflict_disclosed !== true || entry.reviewed_revision !== release_revision) {
+      blockers.push(`human sign-off: ${role} requires approval, evidence, conflict disclosure, and a reviewed revision matching ${release_revision}`);
     }
   }
 
@@ -52,6 +76,7 @@ function evaluateReleaseReadiness(project = {}) {
     production_ready: blockers.length === 0,
     status: blockers.length === 0 ? 'PRODUCTION_READY_PENDING_RELEASE_RECORD' : 'BLOCKED_PENDING_HUMAN_AND_EVIDENCE_GATES',
     blockers,
+    release_revision,
     required_review_roles: REQUIRED_REVIEW_ROLES,
     automated_design_assessment: design,
     automated_bom_audit: bomAudit,
@@ -59,4 +84,4 @@ function evaluateReleaseReadiness(project = {}) {
   };
 }
 
-module.exports = { REQUIRED_REVIEW_ROLES, evaluateReleaseReadiness };
+module.exports = { REQUIRED_REVIEW_ROLES, canonicalize, releaseFingerprint, evaluateReleaseReadiness };

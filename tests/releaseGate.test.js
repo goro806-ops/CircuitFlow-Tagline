@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { evaluateReleaseReadiness, REQUIRED_REVIEW_ROLES } = require('../src/agents/releaseGate');
+const { evaluateReleaseReadiness, releaseFingerprint, REQUIRED_REVIEW_ROLES } = require('../src/agents/releaseGate');
 
 const blocked = evaluateReleaseReadiness({
   schematic: { components: [{ ref: 'U1', mpn: 'TBD', footprint: 'Module' }], nets: [] },
@@ -42,16 +42,23 @@ const complete = {
     material_battery_complete: true,
     user_docs_complete: true
   },
-  release_signoff: Object.fromEntries(REQUIRED_REVIEW_ROLES.map(role => [role, {
-    name: `Reviewer for ${role}`,
-    evidence: `EVID-${role}`,
-    decision: 'approved',
-    conflict_disclosed: true,
-    reviewed_revision: 'PCB-A-001/BOM-001'
-  }]))
+  release_signoff: {}
 };
+complete.release_signoff = Object.fromEntries(REQUIRED_REVIEW_ROLES.map(role => [role, {
+  name: `Reviewer for ${role}`,
+  evidence: `EVID-${role}`,
+  decision: 'approved',
+  conflict_disclosed: true,
+  reviewed_revision: releaseFingerprint(complete)
+}]));
 const ready = evaluateReleaseReadiness(complete);
 assert.strictEqual(ready.production_ready, true);
 assert.strictEqual(ready.blockers.length, 0);
+
+const changed = JSON.parse(JSON.stringify(complete));
+changed.bom.line_items[0].mpn = 'ABC-124';
+const stale = evaluateReleaseReadiness(changed);
+assert.notStrictEqual(stale.release_revision, ready.release_revision);
+assert.ok(stale.blockers.some(item => item.includes('reviewed revision matching')));
 
 console.log('Release readiness gate tests passed.');

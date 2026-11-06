@@ -371,6 +371,8 @@ router.post("/projects/:id/release-signoff", requireAuth, async (req, res) => {
     if (decision !== "approved" && decision !== "rejected") return res.status(400).json({ success: false, error: "decision must be approved or rejected" });
     if (!String(name || "").trim() || !String(evidence || "").trim() || !String(reviewed_revision || "").trim()) return res.status(400).json({ success: false, error: "name, evidence, and reviewed_revision are required" });
     if (typeof conflict_disclosed !== "boolean") return res.status(400).json({ success: false, error: "conflict_disclosed must be boolean" });
+    const currentRevision = evaluateReleaseReadiness(project).release_revision;
+    if (String(reviewed_revision).trim() !== currentRevision) return res.status(409).json({ success: false, error: "reviewed_revision does not match the current release fingerprint; refresh readiness and review the current package", release_revision: currentRevision });
     project.release_signoff = { ...(project.release_signoff || {}), [role]: { name: String(name).trim().slice(0, 160), evidence: String(evidence).trim().slice(0, 500), decision, conflict_disclosed, reviewed_revision: String(reviewed_revision).trim().slice(0, 160), signed_at: new Date().toISOString(), signed_by: req.user.user_id } };
     project.history = project.history || [];
     project.history.push({ timestamp: new Date().toISOString(), agent: "ReleaseSignoffReviewer", action: "release_signoff_updated", details: { role, decision, signed_by: req.user.user_id } });
