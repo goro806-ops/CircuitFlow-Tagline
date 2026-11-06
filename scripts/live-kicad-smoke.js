@@ -20,8 +20,14 @@ function findSensitiveData(value, path = '$') {
   });
 }
 
-async function request(path) {
-  const response = await fetch(`${baseUrl}${path}`, { headers: { accept: 'application/json,text/plain' } });
+async function request(path, options = {}) {
+  const expectedStatus = options.expectedStatus || 200;
+  const headers = { accept: 'application/json,text/plain', ...(options.headers || {}) };
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: options.method || 'GET',
+    headers,
+    body: options.body
+  });
   const body = await response.arrayBuffer();
   const bytes = Buffer.from(body);
   const contentType = response.headers.get('content-type') || '';
@@ -30,7 +36,8 @@ async function request(path) {
   const check = {
     path,
     http_status: response.status,
-    passed: response.ok,
+    expected_status: expectedStatus,
+    passed: response.status === expectedStatus,
     bytes: bytes.length,
     sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
     content_type: contentType
@@ -53,6 +60,15 @@ async function main() {
   assert(status.json?.success === true, 'status check failed');
   const project = await request(`/api/agents/projects/${projectId}?cachebust=${cacheBust}`);
   assert(project.json?.success === true, 'project retrieval failed');
+  const unknownProject = await request('/api/agents/projects/live-smoke-unknown-project?cachebust=' + cacheBust, { expectedStatus: 404 });
+  assert(unknownProject.json?.success === false && unknownProject.check.passed, 'unknown project did not return a controlled 404');
+  const unauthenticatedEvidence = await request(`/api/agents/projects/${projectId}/release-evidence?cachebust=${cacheBust}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ design_warnings_resolved: false }),
+    expectedStatus: 401
+  });
+  assert(unauthenticatedEvidence.json?.success === false && unauthenticatedEvidence.check.passed, 'unauthenticated release write was not rejected');
 
   const bundle = await request(`/api/agents/projects/${projectId}/kicad?cachebust=${cacheBust}`);
   assert(bundle.json?.success === true, 'KiCad bundle generation failed');
