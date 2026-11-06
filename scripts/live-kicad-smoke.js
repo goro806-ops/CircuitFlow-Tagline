@@ -6,6 +6,19 @@ const baseUrl = (process.env.LIVE_BASE_URL || 'https://circuitflow-docker.onrend
 const projectId = process.env.LIVE_PROJECT_ID || 'proj_mvwjheaaj7jg02';
 const cacheBust = `live-kicad-${Date.now()}`;
 const checks = [];
+const sensitiveKey = /(?:api[_-]?key|password|secret|access[_-]?token|refresh[_-]?token|database[_-]?url)/i;
+
+function findSensitiveData(value, path = '$') {
+  if (Array.isArray(value)) return value.flatMap((item, index) => findSensitiveData(item, `${path}[${index}]`));
+  if (!value || typeof value !== 'object') {
+    const text = String(value || '');
+    return /postgres(?:ql)?:\/\/|bearer\s+[a-z0-9._-]{20,}/i.test(text) ? [path] : [];
+  }
+  return Object.entries(value).flatMap(([key, child]) => {
+    const current = `${path}.${key}`;
+    return sensitiveKey.test(key) ? [current] : findSensitiveData(child, current);
+  });
+}
 
 async function request(path) {
   const response = await fetch(`${baseUrl}${path}`, { headers: { accept: 'application/json,text/plain' } });
@@ -68,6 +81,9 @@ async function main() {
   assert(readiness.json.production_ready === false, 'disposable project unexpectedly passed production gate');
   assert(/^[a-f0-9]{64}$/.test(readiness.json.release_revision || ''), 'release fingerprint missing');
 
+  const sensitivePaths = checks.flatMap(check => check.json ? findSensitiveData(check.json, check.path) : []);
+  assert(sensitivePaths.length === 0, `credential-shaped response data detected at ${sensitivePaths.join(', ')}`);
+
   const report = {
     base_url: baseUrl,
     project_id: projectId,
@@ -80,7 +96,8 @@ async function main() {
       pcb_drc: validation.pcb.status,
       schematic_erc: validation.schematic.status,
       release_gate_blocked_safely: readiness.json.production_ready === false,
-      secret_fields_exposed: false
+      secret_fields_exposed: sensitivePaths.length > 0,
+      sensitive_paths: sensitivePaths
     }
   };
   console.log(JSON.stringify(report, null, 2));
