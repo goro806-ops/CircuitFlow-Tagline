@@ -78,4 +78,9 @@ structuralOnly.kicad_validation.semantic = { meaningful: false, symbol_instances
 const structuralOnlyResult = evaluateReleaseReadiness(structuralOnly);
 assert.ok(structuralOnlyResult.blockers.some(item => item.includes('KiCad semantic validation is not meaningful')));
 
+const sameEvidence = JSON.parse(JSON.stringify(complete));
+sameEvidence.kicad_validation.recorded_at = '2030-01-01T00:00:00.000Z';
+sameEvidence.kicad_validation.recorded_by = 'usr-different-recorder';
+assert.strictEqual(releaseFingerprint(sameEvidence), releaseFingerprint(complete));
+
 console.log('Release readiness gate tests passed.');

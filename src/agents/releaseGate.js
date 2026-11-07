@@ -26,6 +26,7 @@ function canonicalize(value) {
 }
 
 function releaseFingerprint(project = {}) {
+  const validation = project.kicad_validation || {};
   const releaseState = {
     architecture: project.architecture || null,
     bom: project.bom || null,
@@ -33,7 +34,14 @@ function releaseFingerprint(project = {}) {
     pcb: project.pcb || null,
     firmware: project.firmware || null,
     enclosure: project.enclosure || null,
-    kicad_validation: project.kicad_validation || null,
+    kicad_validation: validation && Object.keys(validation).length ? {
+      status: validation.status || null,
+      available: validation.available === true,
+      bundle_sha256: validation.bundle_sha256 || null,
+      pcb_status: validation.pcb?.status || null,
+      schematic_status: validation.schematic?.status || null,
+      semantic: validation.semantic || null
+    } : null,
     release_evidence: project.release_evidence || null,
     spice_models: project.spice_models || project.spiceModels || null
   };
