@@ -43,4 +43,13 @@ assert.strictEqual(semantic.symbol_instances, 0);
 assert.strictEqual(semantic.pcb_pads, 0);
 assert.strictEqual(semantic.issues.length, 2);
 
+const meaningfulSemantic = assessKicadSemantics({
+  'design.kicad_sch': '(kicad_sch\n  (symbol (lib_id "Vendor:MCU"))\n)',
+  'design.kicad_pcb': '(kicad_pcb\n  (footprint "Vendor:QFN"\n    (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu" "F.Paste" "F.Mask"))\n  )\n)'
+});
+assert.strictEqual(meaningfulSemantic.meaningful, true);
+assert.strictEqual(meaningfulSemantic.symbol_instances, 1);
+assert.strictEqual(meaningfulSemantic.pcb_pads, 1);
+assert.deepStrictEqual(meaningfulSemantic.issues, []);
+
 console.log('KiCad structural validation passed.');
