@@ -383,16 +383,15 @@ router.post("/projects/:id/release-signoff", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/projects/:id/review", async (req, res) => {
+router.post("/projects/:id/review", requireAuth, async (req, res) => {
   try {
-    const { decision, comments, reviewed_by } = req.body || {};
+    const { decision, comments } = req.body || {};
     const allowed = ["approved", "changes_requested", "rejected"];
     if (!allowed.includes(decision)) {
       return res.status(400).json({ success: false, error: `decision must be one of: ${allowed.join(", ")}` });
     }
     const project = await loadProjectOrThrow(req.params.id);
     assertOwner(req, project);
-    if (!req.user) return res.status(401).json({ success: false, error: "Authentication required for human review" });
     if (!project.escalation) {
       project.escalation = {
         project_id: project.project_id,
@@ -402,7 +401,8 @@ router.post("/projects/:id/review", async (req, res) => {
     }
     project.escalation.human_decision = decision;
     project.escalation.human_comments = comments || null;
-    project.escalation.reviewed_by = reviewed_by || (req.user && req.user.name) || "anonymous";
+    project.escalation.reviewed_by = req.user.name || req.user.user_id;
+    project.escalation.reviewed_by_user_id = req.user.user_id;
     project.escalation.reviewed_at = new Date().toISOString();
     project.escalation.status =
       decision === "approved" ? "human_approved" : decision === "rejected" ? "human_rejected" : "human_changes_requested";

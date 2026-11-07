@@ -10,6 +10,8 @@ Qualified authenticated reviewers can update only their owned project using `POS
 
 The readiness response includes a SHA-256 `release_revision` fingerprint covering the release inputs. Sign-offs must submit that exact fingerprint; changing the BOM, design files, validation results, firmware, enclosure, SPICE references, or release evidence automatically makes prior approvals stale. Each accepted sign-off must also contain the server-generated authenticated reviewer ID and timestamp.
 
+The legacy human-review endpoint is authentication-protected and records the authenticated account server-side; a client-supplied `reviewed_by` value is ignored. That endpoint records an escalation decision only and does not replace the role-based release-signoff records, automated evidence gates, or regulatory approvals.
+
 The automated BOM audit is also available in Render at `GET /api/agents/projects/:id/bom-audit`. It returns the per-component manufacturer, MPN, datasheet, package, footprint, lifecycle, evidence, ratings, and SPICE-model findings without exposing environment secrets. A passing audit remains an engineering evidence result, not manufacturer approval or regulatory certification.
 
 ## 1. Requirements and architecture
