@@ -86,7 +86,10 @@ async function main() {
   assert(schematicName && pcbName && netlistName, 'KiCad bundle is missing an expected file');
   const validation = bundle.json.validation || {};
   assert(validation.engine === 'kicad-cli' && validation.available === true, 'live KiCad CLI is unavailable');
-  assert(validation.status === 'PASSED', `live KiCad bundle validation was ${validation.status}`);
+  assert(validation.status === 'STRUCTURAL_ONLY', `disposable KiCad bundle should be structural-only, got ${validation.status}`);
+  assert(validation.semantic?.meaningful === false, 'structural-only bundle was marked meaningful');
+  assert((validation.semantic?.issues || []).some(issue => issue.includes('no instantiated KiCad symbols')), 'missing-symbol semantic diagnostic is absent');
+  assert((validation.semantic?.issues || []).some(issue => issue.includes('no copper pads')), 'missing-pad semantic diagnostic is absent');
   assert(validation.pcb?.status === 'PASSED', 'live PCB DRC did not pass');
   assert(validation.schematic?.status === 'PASSED', 'live schematic ERC did not pass');
   assert(String(files[schematicName]).startsWith('(kicad_sch '), 'schematic S-expression header is invalid');
@@ -120,6 +123,7 @@ async function main() {
     summary: {
       bundle_files: [schematicName, pcbName, netlistName].sort(),
       bundle_validation: validation.status,
+      semantic_validation: validation.semantic,
       pcb_drc: validation.pcb.status,
       schematic_erc: validation.schematic.status,
       design_readiness_status: designReadiness.status,

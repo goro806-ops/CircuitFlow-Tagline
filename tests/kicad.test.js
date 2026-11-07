@@ -1,5 +1,6 @@
 const assert = require('assert');
 const { generateKiCadProject, validateKiCadBundle } = require('../src/engine/kicad');
+const { assessKicadSemantics } = require('../src/engine/kicadCli');
 const { assessDesignReadiness } = require('../src/agents/exportKicad');
 
 const bundle = generateKiCadProject({ architecture: { mcu: { name: 'Safe "MCU"' } } });
@@ -32,5 +33,14 @@ const verified = assessDesignReadiness({
 });
 assert.ok(!verified.warnings.some(warning => warning.includes('verified KiCad symbol library assignment')));
 assert.ok(!verified.warnings.some(warning => warning.includes('Schematic export is netlist-only')));
+
+const semantic = assessKicadSemantics({
+  'design.kicad_sch': '(kicad_sch (lib_symbols))',
+  'design.kicad_pcb': '(kicad_pcb (footprint "Generated"))'
+});
+assert.strictEqual(semantic.meaningful, false);
+assert.strictEqual(semantic.symbol_instances, 0);
+assert.strictEqual(semantic.pcb_pads, 0);
+assert.strictEqual(semantic.issues.length, 2);
 
 console.log('KiCad structural validation passed.');

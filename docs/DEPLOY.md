@@ -59,7 +59,7 @@ Claude is preferred automatically when `ANTHROPIC_API_KEY` is set.
 3. Open `https://YOUR-APP.onrender.com/agents.html`.
 4. Check `https://YOUR-APP.onrender.com/api/agents/status` — confirm the expected version, LLM provider, and live pricing mode.
 5. Run one small design smoke test and confirm the returned project can be fetched again by its project ID.
-6. When using the Docker profile, inspect `/api/agents/projects/:id/kicad`; its `validation` field reports KiCad CLI DRC/ERC as `PASSED`, `FAILED`, or `KICAD_CLI_UNAVAILABLE`.
+6. When using the Docker profile, inspect `/api/agents/projects/:id/kicad`; its `validation` field reports KiCad CLI DRC/ERC as `PASSED`, `FAILED`, `STRUCTURAL_ONLY`, or `KICAD_CLI_UNAVAILABLE`. `STRUCTURAL_ONLY` means KiCad exited successfully but the export has no instantiated symbols or PCB pads, so it must not be treated as meaningful electrical validation.
 
 ## Redeploy
 

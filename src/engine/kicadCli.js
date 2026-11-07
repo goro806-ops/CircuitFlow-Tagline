@@ -29,11 +29,24 @@ function runCli(args, reportPath) {
   };
 }
 
+function assessKicadSemantics(files = {}) {
+  const pcbName = Object.keys(files).find(name => name.endsWith('.kicad_pcb'));
+  const schName = Object.keys(files).find(name => name.endsWith('.kicad_sch'));
+  const pcb = pcbName ? String(files[pcbName]) : '';
+  const schematic = schName ? String(files[schName]) : '';
+  const symbolInstances = (schematic.match(/\n\s*\(symbol\s/g) || []).length;
+  const pads = (pcb.match(/\n\s*\(pad\s/g) || []).length;
+  const issues = [];
+  if (!symbolInstances) issues.push('schematic contains no instantiated KiCad symbols');
+  if (!pads) issues.push('PCB contains no copper pads');
+  return { meaningful: issues.length === 0, symbol_instances: symbolInstances, pcb_pads: pads, issues };
+}
+
 function validateKicadBundle(files = {}) {
   const pcbName = Object.keys(files).find((name) => name.endsWith('.kicad_pcb'));
   const schName = Object.keys(files).find((name) => name.endsWith('.kicad_sch'));
   if (!pcbName || !schName) {
-    return { engine: 'kicad-cli', status: 'INVALID_BUNDLE', available: false };
+    return { engine: 'kicad-cli', status: 'INVALID_BUNDLE', available: false, semantic: { meaningful: false, issues: ['schematic or PCB file is missing'] } };
   }
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'circuitflow-kicad-cli-'));
@@ -47,12 +60,21 @@ function validateKicadBundle(files = {}) {
     const pcb = runCli(['pcb', 'drc', '--exit-code-violations', '--output', pcbReport, pcbPath], pcbReport);
     const sch = runCli(['sch', 'erc', '--exit-code-violations', '--output', schReport, schPath], schReport);
     if (!pcb.available || !sch.available) {
-      return { engine: 'kicad-cli', status: 'KICAD_CLI_UNAVAILABLE', available: false };
+      return { engine: 'kicad-cli', status: 'KICAD_CLI_UNAVAILABLE', available: false, pcb, schematic: sch };
     }
-    return { engine: 'kicad-cli', status: pcb.status === 'PASSED' && sch.status === 'PASSED' ? 'PASSED' : 'FAILED', available: true, pcb, schematic: sch };
+    const semantic = assessKicadSemantics(files);
+    const cliPassed = pcb.status === 'PASSED' && sch.status === 'PASSED';
+    return {
+      engine: 'kicad-cli',
+      status: cliPassed ? (semantic.meaningful ? 'PASSED' : 'STRUCTURAL_ONLY') : 'FAILED',
+      available: true,
+      semantic,
+      pcb,
+      schematic: sch
+    };
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
-module.exports = { validateKicadBundle };
+module.exports = { assessKicadSemantics, validateKicadBundle };
