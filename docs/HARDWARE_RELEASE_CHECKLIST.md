@@ -25,6 +25,7 @@ The automated BOM audit is also available in Render at `GET /api/agents/projects
 
 - [ ] KiCad schematic ERC completes with no unexplained errors or warnings.
 - [ ] KiCad PCB DRC completes with no unexplained violations.
+- [ ] KiCad semantic validation is meaningful: the frozen bundle contains instantiated symbols and PCB copper pads; CLI exit code alone is insufficient.
 - [ ] Every symbol has a verified manufacturer part number and footprint.
 - [ ] Every component records a verified KiCad `symbol_library_id` and `symbol_name`, `footprint_verified: true`, and `pin_map_verified: true`; generic generated footprints do not satisfy this item.
 - [ ] Pin mappings, power rails, decoupling, pull-ups, protection, test points, and programming access are reviewed.

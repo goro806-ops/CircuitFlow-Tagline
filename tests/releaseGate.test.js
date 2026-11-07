@@ -33,7 +33,8 @@ const complete = {
   pcb: { placements: [{ ref: 'U1', x_mm: 10, y_mm: 10 }] },
   kicad_validation: {
     pcb: { status: 'PASSED' },
-    schematic: { status: 'PASSED' }
+    schematic: { status: 'PASSED' },
+    semantic: { meaningful: true, symbol_instances: 1, pcb_pads: 1, issues: [] }
   },
   release_evidence: {
     design_warnings_resolved: true,
@@ -71,5 +72,10 @@ const unaudited = JSON.parse(JSON.stringify(complete));
 delete unaudited.release_signoff.electrical_engineer.signed_by;
 const unauditedResult = evaluateReleaseReadiness(unaudited);
 assert.ok(unauditedResult.blockers.some(item => item.includes('authenticated reviewer identity')));
+
+const structuralOnly = JSON.parse(JSON.stringify(complete));
+structuralOnly.kicad_validation.semantic = { meaningful: false, symbol_instances: 0, pcb_pads: 0, issues: ['schematic contains no instantiated KiCad symbols'] };
+const structuralOnlyResult = evaluateReleaseReadiness(structuralOnly);
+assert.ok(structuralOnlyResult.blockers.some(item => item.includes('KiCad semantic validation is not meaningful')));
 
 console.log('Release readiness gate tests passed.');

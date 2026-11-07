@@ -58,6 +58,7 @@ function evaluateReleaseReadiness(project = {}) {
   if (!spiceAudit.verified) blockers.push(...spiceAudit.blockers.map(message => `simulation: ${message}`));
   if (exportReadiness.pcb?.status !== 'PASSED') blockers.push('validation: KiCad PCB DRC is not recorded as passed for this project');
   if (exportReadiness.schematic?.status !== 'PASSED') blockers.push('validation: KiCad schematic ERC is not recorded as passed for this project');
+  if (exportReadiness.semantic?.meaningful !== true) blockers.push('validation: KiCad semantic validation is not meaningful; instantiated symbols and PCB pads must be present');
   if (evidence.applicability_confirmed !== true) blockers.push('compliance: target markets and applicable requirements are not confirmed');
   if (evidence.part_verification_complete !== true) blockers.push('bom: manufacturer part numbers, datasheets, lifecycle status, and footprints are not verified');
   if (evidence.spice_model_provenance_complete !== true) blockers.push('simulation: vendor-model provenance and license records are not complete, or not-applicable rationale is missing');
