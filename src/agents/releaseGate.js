@@ -25,6 +25,19 @@ function canonicalize(value) {
   return value;
 }
 
+function designFingerprint(project = {}) {
+  const designState = {
+    architecture: project.architecture || null,
+    bom: project.bom || null,
+    schematic: project.schematic || null,
+    pcb: project.pcb || null,
+    firmware: project.firmware || null,
+    enclosure: project.enclosure || null,
+    spice_models: project.spice_models || project.spiceModels || null
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(canonicalize(designState))).digest('hex');
+}
+
 function releaseFingerprint(project = {}) {
   const validation = project.kicad_validation || {};
   const releaseState = {
@@ -67,6 +80,7 @@ function evaluateReleaseReadiness(project = {}) {
   if (exportReadiness.pcb?.status !== 'PASSED') blockers.push('validation: KiCad PCB DRC is not recorded as passed for this project');
   if (exportReadiness.schematic?.status !== 'PASSED') blockers.push('validation: KiCad schematic ERC is not recorded as passed for this project');
   if (exportReadiness.semantic?.meaningful !== true) blockers.push('validation: KiCad semantic validation is not meaningful; instantiated symbols and PCB pads must be present');
+  if (exportReadiness.source_design_fingerprint !== designFingerprint(project)) blockers.push('validation: recorded KiCad result is stale; re-run server validation for the current design inputs');
   if (evidence.applicability_confirmed !== true) blockers.push('compliance: target markets and applicable requirements are not confirmed');
   if (evidence.part_verification_complete !== true) blockers.push('bom: manufacturer part numbers, datasheets, lifecycle status, and footprints are not verified');
   if (evidence.spice_model_provenance_complete !== true) blockers.push('simulation: vendor-model provenance and license records are not complete, or not-applicable rationale is missing');
@@ -93,4 +107,4 @@ function evaluateReleaseReadiness(project = {}) {
   };
 }
 
-module.exports = { REQUIRED_REVIEW_ROLES, canonicalize, releaseFingerprint, evaluateReleaseReadiness };
+module.exports = { REQUIRED_REVIEW_ROLES, canonicalize, designFingerprint, releaseFingerprint, evaluateReleaseReadiness };

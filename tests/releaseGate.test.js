@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { evaluateReleaseReadiness, releaseFingerprint, REQUIRED_REVIEW_ROLES } = require('../src/agents/releaseGate');
+const { evaluateReleaseReadiness, releaseFingerprint, designFingerprint, REQUIRED_REVIEW_ROLES } = require('../src/agents/releaseGate');
 
 const blocked = evaluateReleaseReadiness({
   schematic: { components: [{ ref: 'U1', mpn: 'TBD', footprint: 'Module' }], nets: [] },
@@ -49,6 +49,7 @@ const complete = {
   },
   release_signoff: {}
 };
+complete.kicad_validation.source_design_fingerprint = designFingerprint(complete);
 complete.release_signoff = Object.fromEntries(REQUIRED_REVIEW_ROLES.map(role => [role, {
   name: `Reviewer for ${role}`,
   evidence: `EVID-${role}`,
@@ -67,6 +68,7 @@ changed.bom.line_items[0].mpn = 'ABC-124';
 const stale = evaluateReleaseReadiness(changed);
 assert.notStrictEqual(stale.release_revision, ready.release_revision);
 assert.ok(stale.blockers.some(item => item.includes('reviewed revision matching')));
+assert.ok(stale.blockers.some(item => item.includes('recorded KiCad result is stale')));
 
 const unaudited = JSON.parse(JSON.stringify(complete));
 delete unaudited.release_signoff.electrical_engineer.signed_by;

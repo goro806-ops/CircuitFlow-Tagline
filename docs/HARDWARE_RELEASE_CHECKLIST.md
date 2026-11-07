@@ -14,7 +14,7 @@ The legacy human-review endpoint is authentication-protected and records the aut
 
 The automated BOM audit is also available in Render at `GET /api/agents/projects/:id/bom-audit`. It returns the per-component manufacturer, MPN, datasheet, package, footprint, lifecycle, evidence, ratings, and SPICE-model findings without exposing environment secrets. A passing audit remains an engineering evidence result, not manufacturer approval or regulatory certification.
 
-The exact server-generated KiCad result can be recorded by an authenticated project owner with `POST /api/agents/projects/:id/kicad-validation`. The endpoint recomputes the export, runs validation, stores the semantic result and bundle SHA-256, and records the authenticated user and timestamp. Clients cannot submit or forge validation statuses.
+The exact server-generated KiCad result can be recorded by an authenticated project owner with `POST /api/agents/projects/:id/kicad-validation`. The endpoint recomputes the export, runs validation, stores the semantic result, bundle SHA-256, and source-design fingerprint, and records the authenticated user and timestamp. Any later change to the design inputs makes the stored result stale until validation is rerun. Clients cannot submit or forge validation statuses.
 
 ## 1. Requirements and architecture
 

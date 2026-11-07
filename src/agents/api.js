@@ -19,7 +19,7 @@ const store = require("./store");
 const { generateEnclosureStl } = require("./exportStl");
 const { generateKicadProject } = require("./exportKicad");
 const { validateKicadBundle } = require("../engine/kicadCli");
-const { evaluateReleaseReadiness } = require("./releaseGate");
+const { evaluateReleaseReadiness, designFingerprint } = require("./releaseGate");
 const { auditBom } = require("./bomVerification");
 
 const router = express.Router();
@@ -279,6 +279,7 @@ router.post("/projects/:id/kicad-validation", requireAuth, async (req, res) => {
     project.kicad_validation = {
       ...validation,
       bundle_sha256,
+      source_design_fingerprint: designFingerprint(project),
       recorded_at: new Date().toISOString(),
       recorded_by: req.user.user_id,
       source: "server-generated-kicad-export"
