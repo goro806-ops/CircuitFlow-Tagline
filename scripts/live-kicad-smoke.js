@@ -76,6 +76,13 @@ async function main() {
     expectedStatus: 401
   });
   assert(unauthenticatedReview.json?.success === false && unauthenticatedReview.check.passed, 'unauthenticated legacy review was not rejected');
+  const unauthenticatedKicadRecord = await request(`/api/agents/projects/${projectId}/kicad-validation?cachebust=${cacheBust}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+    expectedStatus: 401
+  });
+  assert(unauthenticatedKicadRecord.json?.success === false && unauthenticatedKicadRecord.check.passed, 'unauthenticated KiCad validation recording was not rejected');
 
   const bundle = await request(`/api/agents/projects/${projectId}/kicad?cachebust=${cacheBust}`);
   assert(bundle.json?.success === true, 'KiCad bundle generation failed');

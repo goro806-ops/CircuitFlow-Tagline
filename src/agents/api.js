@@ -3,6 +3,7 @@
  */
 
 const express = require("express");
+const crypto = require("crypto");
 const { version: APP_VERSION } = require("../../package.json");
 const {
   optionalAuth,
@@ -260,6 +261,32 @@ router.get("/projects/:id/kicad", async (req, res) => {
     }
     const kicad = generateKicadProject(project);
     res.json({ success: true, kicad, validation: validateKicadBundle(kicad.files) });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/projects/:id/kicad-validation", requireAuth, async (req, res) => {
+  try {
+    const project = await loadProjectOrThrow(req.params.id);
+    assertOwner(req, project);
+    if (!project.schematic || !project.pcb) return res.status(404).json({ success: false, error: "Need schematic and PCB" });
+    const kicad = generateKicadProject(project);
+    const validation = validateKicadBundle(kicad.files);
+    const bundleHash = crypto.createHash("sha256");
+    for (const name of Object.keys(kicad.files).sort()) bundleHash.update(name).update("\0").update(String(kicad.files[name])).update("\0");
+    const bundle_sha256 = bundleHash.digest("hex");
+    project.kicad_validation = {
+      ...validation,
+      bundle_sha256,
+      recorded_at: new Date().toISOString(),
+      recorded_by: req.user.user_id,
+      source: "server-generated-kicad-export"
+    };
+    project.history = project.history || [];
+    project.history.push({ timestamp: new Date().toISOString(), agent: "KiCadValidationRecorder", action: "kicad_validation_recorded", details: { status: validation.status, bundle_sha256, recorded_by: req.user.user_id } });
+    await store.saveProject(project);
+    res.json({ success: true, project_id: project.project_id, kicad_validation: project.kicad_validation, readiness: evaluateReleaseReadiness(project) });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }
