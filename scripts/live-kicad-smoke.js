@@ -91,6 +91,10 @@ async function main() {
   assert(validation.schematic?.status === 'PASSED', 'live schematic ERC did not pass');
   assert(String(files[schematicName]).startsWith('(kicad_sch '), 'schematic S-expression header is invalid');
   assert(String(files[pcbName]).startsWith('(kicad_pcb '), 'PCB S-expression header is invalid');
+  const designReadiness = bundle.json.kicad?.readiness || {};
+  assert(designReadiness.status !== 'READY_FOR_CLI_VALIDATION', 'disposable design unexpectedly has no KiCad readiness warnings');
+  assert((designReadiness.warnings || []).some(warning => warning.includes('netlist-only')), 'netlist-only readiness warning is missing');
+  assert((designReadiness.warnings || []).some(warning => warning.includes('verified KiCad symbol library assignment')), 'symbol-library readiness warning is missing');
 
   const schematic = await request(`/api/agents/projects/${projectId}/kicad.sch?cachebust=${cacheBust}`);
   const pcb = await request(`/api/agents/projects/${projectId}/kicad.pcb?cachebust=${cacheBust}`);
@@ -118,6 +122,8 @@ async function main() {
       bundle_validation: validation.status,
       pcb_drc: validation.pcb.status,
       schematic_erc: validation.schematic.status,
+      design_readiness_status: designReadiness.status,
+      netlist_only_warning_present: true,
       release_gate_blocked_safely: readiness.json.production_ready === false,
       secret_fields_exposed: sensitivePaths.length > 0,
       sensitive_paths: sensitivePaths
