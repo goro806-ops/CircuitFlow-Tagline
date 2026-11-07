@@ -16,6 +16,8 @@ The automated BOM audit is also available in Render at `GET /api/agents/projects
 
 The exact server-generated KiCad result can be recorded by an authenticated project owner with `POST /api/agents/projects/:id/kicad-validation`. The endpoint recomputes the export, runs validation, stores the semantic result, bundle SHA-256, and source-design fingerprint, and records the authenticated user and timestamp. Any later change to the design inputs makes the stored result stale until validation is rerun. Clients cannot submit or forge validation statuses.
 
+The exact server-generated SPICE result can be recorded with `POST /api/agents/projects/:id/spice-validation`. The endpoint runs the configured solver, stores the convergence status, engine, netlist SHA-256, and source-design fingerprint, and records the authenticated user and timestamp. Analytical fallback results do not satisfy the production release gate.
+
 ## 1. Requirements and architecture
 
 - [ ] Product requirements, operating modes, environmental limits, lifetime, and target cost are baselined.

@@ -83,6 +83,13 @@ async function main() {
     expectedStatus: 401
   });
   assert(unauthenticatedKicadRecord.json?.success === false && unauthenticatedKicadRecord.check.passed, 'unauthenticated KiCad validation recording was not rejected');
+  const unauthenticatedSpiceRecord = await request(`/api/agents/projects/${projectId}/spice-validation?cachebust=${cacheBust}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+    expectedStatus: 401
+  });
+  assert(unauthenticatedSpiceRecord.json?.success === false && unauthenticatedSpiceRecord.check.passed, 'unauthenticated SPICE validation recording was not rejected');
 
   const bundle = await request(`/api/agents/projects/${projectId}/kicad?cachebust=${cacheBust}`);
   assert(bundle.json?.success === true, 'KiCad bundle generation failed');

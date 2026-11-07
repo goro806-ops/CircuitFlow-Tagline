@@ -50,6 +50,14 @@ const complete = {
   release_signoff: {}
 };
 complete.kicad_validation.source_design_fingerprint = designFingerprint(complete);
+complete.spice_validation = {
+  engine: 'ngspice',
+  status: 'CONVERGED',
+  available: true,
+  analytical_fallback: false,
+  netlist_sha256: 'a'.repeat(64),
+  source_design_fingerprint: designFingerprint(complete)
+};
 complete.release_signoff = Object.fromEntries(REQUIRED_REVIEW_ROLES.map(role => [role, {
   name: `Reviewer for ${role}`,
   evidence: `EVID-${role}`,

@@ -19,6 +19,7 @@ const store = require("./store");
 const { generateEnclosureStl } = require("./exportStl");
 const { generateKicadProject } = require("./exportKicad");
 const { validateKicadBundle } = require("../engine/kicadCli");
+const { runSimulationAndThermal } = require("../engine/spice");
 const { evaluateReleaseReadiness, designFingerprint } = require("./releaseGate");
 const { auditBom } = require("./bomVerification");
 
@@ -288,6 +289,33 @@ router.post("/projects/:id/kicad-validation", requireAuth, async (req, res) => {
     project.history.push({ timestamp: new Date().toISOString(), agent: "KiCadValidationRecorder", action: "kicad_validation_recorded", details: { status: validation.status, bundle_sha256, recorded_by: req.user.user_id } });
     await store.saveProject(project);
     res.json({ success: true, project_id: project.project_id, kicad_validation: project.kicad_validation, readiness: evaluateReleaseReadiness(project) });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/projects/:id/spice-validation", requireAuth, async (req, res) => {
+  try {
+    const project = await loadProjectOrThrow(req.params.id);
+    assertOwner(req, project);
+    const result = runSimulationAndThermal(project.architecture || {}, project.bom || {}, project.consumer || {}, project.enclosure || project.shape || {});
+    const netlist_sha256 = crypto.createHash("sha256").update(String(result.spiceNetlist || "")).digest("hex");
+    const source_design_fingerprint = designFingerprint(project);
+    project.spice_validation = {
+      engine: result.simulation.engine,
+      status: result.simulation.status,
+      available: result.simulation.available === true,
+      analytical_fallback: result.simulation.analytical_fallback === true,
+      netlist_sha256,
+      source_design_fingerprint,
+      recorded_at: new Date().toISOString(),
+      recorded_by: req.user.user_id,
+      source: "server-generated-spice-simulation"
+    };
+    project.history = project.history || [];
+    project.history.push({ timestamp: new Date().toISOString(), agent: "SpiceValidationRecorder", action: "spice_validation_recorded", details: { status: project.spice_validation.status, engine: project.spice_validation.engine, netlist_sha256, recorded_by: req.user.user_id } });
+    await store.saveProject(project);
+    res.json({ success: true, project_id: project.project_id, spice_validation: project.spice_validation, readiness: evaluateReleaseReadiness(project) });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }

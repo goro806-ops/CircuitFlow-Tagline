@@ -56,7 +56,14 @@ function releaseFingerprint(project = {}) {
       semantic: validation.semantic || null
     } : null,
     release_evidence: project.release_evidence || null,
-    spice_models: project.spice_models || project.spiceModels || null
+    spice_models: project.spice_models || project.spiceModels || null,
+    spice_validation: project.spice_validation ? {
+      status: project.spice_validation.status || null,
+      engine: project.spice_validation.engine || null,
+      analytical_fallback: project.spice_validation.analytical_fallback === true,
+      netlist_sha256: project.spice_validation.netlist_sha256 || null,
+      source_design_fingerprint: project.spice_validation.source_design_fingerprint || null
+    } : null
   };
   return crypto.createHash('sha256').update(JSON.stringify(canonicalize(releaseState))).digest('hex');
 }
@@ -81,6 +88,9 @@ function evaluateReleaseReadiness(project = {}) {
   if (exportReadiness.schematic?.status !== 'PASSED') blockers.push('validation: KiCad schematic ERC is not recorded as passed for this project');
   if (exportReadiness.semantic?.meaningful !== true) blockers.push('validation: KiCad semantic validation is not meaningful; instantiated symbols and PCB pads must be present');
   if (exportReadiness.source_design_fingerprint !== designFingerprint(project)) blockers.push('validation: recorded KiCad result is stale; re-run server validation for the current design inputs');
+  const spiceValidation = project.spice_validation || {};
+  if (spiceValidation.status !== 'CONVERGED' || spiceValidation.analytical_fallback === true) blockers.push('validation: a current real-solver SPICE result is not recorded for this design');
+  if (spiceValidation.source_design_fingerprint !== designFingerprint(project)) blockers.push('validation: recorded SPICE result is stale; re-run server validation for the current design inputs');
   if (evidence.applicability_confirmed !== true) blockers.push('compliance: target markets and applicable requirements are not confirmed');
   if (evidence.part_verification_complete !== true) blockers.push('bom: manufacturer part numbers, datasheets, lifecycle status, and footprints are not verified');
   if (evidence.spice_model_provenance_complete !== true) blockers.push('simulation: vendor-model provenance and license records are not complete, or not-applicable rationale is missing');
