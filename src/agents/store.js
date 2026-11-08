@@ -250,7 +250,7 @@ async function listProjects(ownerId = null) {
       );
     } else {
       r = await pool.query(
-        "SELECT data FROM cf_projects ORDER BY updated_at DESC LIMIT 100"
+        "SELECT data FROM cf_projects WHERE owner_id IS NULL ORDER BY updated_at DESC LIMIT 100"
       );
     }
     return r.rows.map(row => summarizeProject(row.data));
@@ -267,7 +267,7 @@ async function listProjects(ownerId = null) {
       }
     })
     .filter(Boolean)
-    .filter(p => !ownerId || !p.owner_id || p.owner_id === ownerId)
+    .filter(p => !ownerId ? !p.owner_id : (!p.owner_id || p.owner_id === ownerId))
     .map(summarizeProject)
     .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
 }

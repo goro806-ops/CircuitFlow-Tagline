@@ -58,6 +58,9 @@ async function main() {
   assert(ready.check.passed, 'readiness check failed');
   const status = await request(`/api/agents/status?cachebust=${cacheBust}`);
   assert(status.json?.success === true, 'status check failed');
+  const projects = await request(`/api/agents/projects?cachebust=${cacheBust}`);
+  assert(projects.json?.ownerless_only === true, 'unauthenticated project listing is not ownerless-only');
+  assert((projects.json?.projects || []).every(project => !project.owner_id), 'unauthenticated project listing exposed an owned project');
   const project = await request(`/api/agents/projects/${projectId}?cachebust=${cacheBust}`);
   assert(project.json?.success === true, 'project retrieval failed');
   const unknownProject = await request('/api/agents/projects/live-smoke-unknown-project?cachebust=' + cacheBust, { expectedStatus: 404 });

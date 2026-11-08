@@ -190,7 +190,7 @@ router.get("/projects", async (req, res) => {
   try {
     const userId = req.user ? req.user.user_id : null;
     const projects = await store.listProjects(userId);
-    res.json({ success: true, projects, filtered_by_owner: !!userId });
+    res.json({ success: true, projects, filtered_by_owner: !!userId, ownerless_only: !userId });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
