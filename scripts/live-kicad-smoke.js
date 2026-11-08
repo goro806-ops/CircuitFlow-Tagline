@@ -68,6 +68,12 @@ async function main() {
     expectedStatus: 401
   });
   assert(unauthenticatedRun.json?.success === false && unauthenticatedRun.check.passed, 'unauthenticated design creation was not rejected');
+  const legacyGenerate = await request(`/api/generate/kicad?cachebust=${cacheBust}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}), expectedStatus: 401
+  });
+  assert(legacyGenerate.json?.success === false && legacyGenerate.check.passed, 'unauthenticated legacy generation was not rejected');
+  const legacyProjectList = await request(`/api/projects/list?cachebust=${cacheBust}`, { expectedStatus: 401 });
+  assert(legacyProjectList.json?.success === false && legacyProjectList.check.passed, 'unauthenticated legacy project listing was not rejected');
   const project = await request(`/api/agents/projects/${projectId}?cachebust=${cacheBust}`);
   assert(project.json?.success === true, 'project retrieval failed');
   const unknownProject = await request('/api/agents/projects/live-smoke-unknown-project?cachebust=' + cacheBust, { expectedStatus: 404 });

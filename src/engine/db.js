@@ -15,6 +15,7 @@ function saveProject(projectData) {
     id: projectId,
     createdAt: timestamp,
     updatedAt: timestamp,
+    owner_id: projectData.owner_id || null,
     name: projectData.architecture?.deviceConcept || 'CircuitFlow Design Project',
     summary: {
       mcu: projectData.architecture?.mcu?.name || 'N/A',
@@ -31,11 +32,13 @@ function saveProject(projectData) {
 /**
  * Lists all stored hardware design projects.
  */
-function listProjects() {
+function listProjects(ownerId = null) {
   const list = [];
   for (const [id, record] of projectsDb.entries()) {
+    if (ownerId && record.owner_id && record.owner_id !== ownerId) continue;
     list.push({
       id: record.id,
+      owner_id: record.owner_id || null,
       name: record.name,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,

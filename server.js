@@ -28,6 +28,7 @@ const exportEngine = require('./src/engine/export');
 const businessEngine = require('./src/engine/business');
 
 const agentsApi = require('./src/agents/api');
+const { requireAuth } = require('./src/agents/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -140,6 +141,9 @@ app.get(['/ready', '/api/ready'], async (req, res) => {
 });
 
 app.use('/api/agents', agentsApi);
+app.use('/api/generate', requireAuth);
+app.use('/api/projects', requireAuth);
+app.use('/api/export', requireAuth);
 
 app.get('/api/business/pricing', (req, res) => {
   try {
@@ -160,7 +164,7 @@ app.post('/api/business/export-cost', (req, res) => {
   }
 });
 
-app.post('/api/business/turnkey-quote', (req, res) => {
+app.post('/api/business/turnkey-quote', requireAuth, (req, res) => {
   try {
     const { projectData, tierId } = req.body;
     const quote = businessEngine.calculateTurnkeyQuote(projectData, tierId);
@@ -170,10 +174,10 @@ app.post('/api/business/turnkey-quote', (req, res) => {
   }
 });
 
-app.post('/api/generate/architecture', async (req, res) => {
+app.post('/api/generate/architecture', requireAuth, async (req, res) => {
   try {
-    const { prompt, constraints, apiKey, provider } = req.body;
-    const aiResult = await aiBrainEngine.synthesizeWithAIBrain(prompt, apiKey, provider);
+    const { prompt, constraints } = req.body;
+    const aiResult = await aiBrainEngine.synthesizeWithAIBrain(prompt);
     const arch = architectureEngine.generateArchitecture(prompt, constraints);
     res.json({ success: true, architecture: arch, aiBrain: aiResult });
   } catch (err) {
@@ -181,7 +185,7 @@ app.post('/api/generate/architecture', async (req, res) => {
   }
 });
 
-app.post('/api/generate/kicad', (req, res) => {
+app.post('/api/generate/kicad', requireAuth, (req, res) => {
   try {
     const designData = req.body || {};
     const kicadProject = kicadEngine.generateKiCadProject(designData);
@@ -201,9 +205,9 @@ app.get('/api/components/search', async (req, res) => {
   }
 });
 
-app.post('/api/projects/save', (req, res) => {
+app.post('/api/projects/save', requireAuth, (req, res) => {
   try {
-    const projectData = req.body || {};
+    const projectData = { ...(req.body || {}), owner_id: req.user.user_id };
     const record = dbEngine.saveProject(projectData);
     res.json({ success: true, project: record });
   } catch (err) {
@@ -211,20 +215,23 @@ app.post('/api/projects/save', (req, res) => {
   }
 });
 
-app.get('/api/projects/list', (req, res) => {
+app.get('/api/projects/list', requireAuth, (req, res) => {
   try {
-    const projects = dbEngine.listProjects();
+    const projects = dbEngine.listProjects(req.user.user_id);
     res.json({ success: true, projects });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.get('/api/projects/:id', (req, res) => {
+app.get('/api/projects/:id', requireAuth, (req, res) => {
   try {
     const project = dbEngine.getProjectById(req.params.id);
     if (!project) {
       return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    if (project.owner_id !== req.user.user_id) {
+      return res.status(403).json({ success: false, error: 'Not your project' });
     }
     res.json({ success: true, project });
   } catch (err) {
@@ -352,7 +359,7 @@ app.post('/api/generate/multiboard', (req, res) => {
   }
 });
 
-app.post('/api/export/package', async (req, res) => {
+app.post('/api/export/package', requireAuth, async (req, res) => {
   try {
     const projectData = req.body;
     const zipBuffer = await exportEngine.bundleReleasePackage(projectData);
