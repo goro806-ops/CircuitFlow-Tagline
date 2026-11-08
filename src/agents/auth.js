@@ -5,6 +5,7 @@
 
 const crypto = require("crypto");
 const store = require("./store");
+const { redactSecrets } = require("./redact");
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -99,8 +100,7 @@ async function loginWithGoogleCode(code, req) {
   });
 
   if (!tokenRes.ok) {
-    const text = await tokenRes.text();
-    console.warn("[auth] Google token error:", text.slice(0, 300));
+    console.warn("[auth] Google token exchange failed with status:", tokenRes.status);
     const err = new Error("Google token exchange failed");
     err.status = 401;
     throw err;
@@ -250,7 +250,7 @@ function optionalAuth(req, res, next) {
       next();
     })
     .catch(err => {
-      console.warn("[auth] optionalAuth error:", err.message);
+      console.warn("[auth] optionalAuth error:", redactSecrets(err.message));
       req.user = null;
       next();
     });

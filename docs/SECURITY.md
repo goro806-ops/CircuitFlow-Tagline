@@ -8,6 +8,7 @@
 - Request bodies are limited to 2 MB by default.
 - OAuth callback tokens are delivered in URL fragments rather than query parameters.
 - API keys and session tokens are stored as SHA-256 hashes; bearer credentials are accepted only through authorization headers, never query parameters.
+- Authentication, provider, and pipeline error logs redact bearer tokens, API keys, passwords, database URLs, and configured provider secrets; raw OAuth error bodies are not logged.
 - Postgres is the expected cloud persistence backend. `/ready` reports failure when a configured database cannot be initialized.
 - Production dependency auditing runs in GitHub Actions.
 - SPICE output reports whether `ngspice` actually converged; when the binary is unavailable, the result is explicitly marked as an analytical fallback.

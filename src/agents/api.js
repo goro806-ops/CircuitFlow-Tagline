@@ -23,6 +23,7 @@ const { runSimulationAndThermal } = require("../engine/spice");
 const { evaluateReleaseReadiness, designFingerprint } = require("./releaseGate");
 const { auditBom } = require("./bomVerification");
 const { assertOwner } = require("./projectAccess");
+const { redactSecrets } = require("./redact");
 
 const router = express.Router();
 
@@ -179,7 +180,7 @@ router.post("/run", requireAuth, async (req, res) => {
       project
     });
   } catch (err) {
-    console.error("[api/agents/run]", err);
+    console.error("[api/agents/run]", redactSecrets(err.message));
     res.status(500).json({ success: false, error: err.message });
   }
 });
