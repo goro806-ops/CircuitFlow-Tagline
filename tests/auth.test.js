@@ -1,4 +1,6 @@
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const auth = require('../src/agents/auth');
 const store = require('../src/agents/store');
 
@@ -28,6 +30,16 @@ async function runTests() {
       }
     });
   });
+
+  const email = `session-${Date.now()}@example.test`;
+  await auth.registerUser({ name: 'Session Test', email, password: 'correct horse battery staple' });
+  const login = await auth.loginUser(email, 'correct horse battery staple');
+  assert.ok(login.token.startsWith('tok_'));
+  assert.ok(await store.getUserByToken(login.token));
+  if (!store.hasDatabaseUrl()) {
+    const persisted = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'data', 'users.json'), 'utf8'));
+    assert.ok(persisted.sessions.every(session => !String(session.token).startsWith('tok_')));
+  }
 
   console.log('API-key hashing and lookup checks passed.');
 }

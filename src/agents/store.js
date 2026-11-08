@@ -6,6 +6,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
@@ -13,6 +14,10 @@ const PROJECTS_DIR = path.join(DATA_DIR, "projects");
 
 let pool = null;
 let pgReady = null;
+
+function hashSessionToken(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
 
 function hasDatabaseUrl() {
   return Boolean(process.env.DATABASE_URL);
@@ -61,6 +66,10 @@ async function initPostgres() {
       CREATE INDEX IF NOT EXISTS cf_projects_owner ON cf_projects(owner_id);
       CREATE INDEX IF NOT EXISTS cf_sessions_exp ON cf_sessions(expires_at);
     `);
+    const legacySessions = await p.query("SELECT token FROM cf_sessions WHERE token LIKE 'tok_%'");
+    for (const row of legacySessions.rows) {
+      await p.query("UPDATE cf_sessions SET token = $1 WHERE token = $2", [hashSessionToken(row.token), row.token]);
+    }
     console.log("[store] Postgres ready");
     return true;
   })().catch(err => {
@@ -85,6 +94,15 @@ function loadJsonStore() {
     const data = JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
     if (!data.users) data.users = [];
     if (!data.sessions) data.sessions = [];
+    let migrated = false;
+    data.sessions = data.sessions.map((session) => {
+      if (typeof session.token === "string" && session.token.startsWith("tok_")) {
+        migrated = true;
+        return { ...session, token: hashSessionToken(session.token) };
+      }
+      return session;
+    });
+    if (migrated) saveJsonStore(data);
     return data;
   } catch {
     return { users: [], sessions: [] };
@@ -176,14 +194,14 @@ async function createSession(userId, token, createdAt, expiresAt) {
       `INSERT INTO cf_sessions (token, user_id, expires_at, created_at)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (token) DO UPDATE SET user_id = $2, expires_at = $3`,
-      [token, userId, expiresAt, createdAt]
+      [hashSessionToken(token), userId, expiresAt, createdAt]
     );
     return;
   }
   const data = loadJsonStore();
   const now = Date.now();
   data.sessions = (data.sessions || []).filter(s => s.expires_at > now);
-  data.sessions.push({ token, user_id: userId, created_at: createdAt, expires_at: expiresAt });
+  data.sessions.push({ token: hashSessionToken(token), user_id: userId, created_at: createdAt, expires_at: expiresAt });
   saveJsonStore(data);
 }
 
@@ -193,13 +211,13 @@ async function getUserByToken(token) {
   if (await initPostgres()) {
     const r = await pool.query(
       "SELECT user_id FROM cf_sessions WHERE token = $1 AND expires_at > $2",
-      [token, now]
+      [hashSessionToken(token), now]
     );
     if (!r.rows[0]) return null;
     return getUserById(r.rows[0].user_id);
   }
   const data = loadJsonStore();
-  const session = (data.sessions || []).find(s => s.token === token && s.expires_at > now);
+  const session = (data.sessions || []).find(s => s.token === hashSessionToken(token) && s.expires_at > now);
   if (!session) return null;
   return data.users.find(u => u.user_id === session.user_id) || null;
 }

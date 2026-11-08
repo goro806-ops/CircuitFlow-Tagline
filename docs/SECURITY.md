@@ -7,6 +7,7 @@
 - API, authentication, and expensive design-run rate limits are enabled.
 - Request bodies are limited to 2 MB by default.
 - OAuth callback tokens are delivered in URL fragments rather than query parameters.
+- API keys and session tokens are stored as SHA-256 hashes; bearer credentials are accepted only through authorization headers, never query parameters.
 - Postgres is the expected cloud persistence backend. `/ready` reports failure when a configured database cannot be initialized.
 - Production dependency auditing runs in GitHub Actions.
 - SPICE output reports whether `ngspice` actually converged; when the binary is unavailable, the result is explicitly marked as an analytical fallback.
@@ -17,7 +18,7 @@ Store provider credentials only in Render Environment Variables or an equivalent
 
 ## Authentication boundaries
 
-API keys and bearer session tokens authorize project access. Anonymous design runs are rate-limited but are not a substitute for account authentication. Before opening CircuitFlow to sensitive private designs, require authentication for project listing and artifact downloads and add an explicit ownership migration for legacy anonymous projects.
+API keys and bearer session tokens authorize project access. Anonymous design runs are rate-limited but are not a substitute for account authentication. New design runs, project listing of owned records, and artifact downloads require authentication; ownerless disposable records are retained only for diagnostics.
 
 ## Hardware safety boundary
 
