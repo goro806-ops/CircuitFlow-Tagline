@@ -24,6 +24,8 @@ The project-list endpoint follows the same boundary: unauthenticated callers rec
 
 New design generation through `POST /api/agents/run` requires authentication. The server assigns the generated project to the authenticated user before persistence; anonymous callers cannot create ownerless projects containing customer design data.
 
+API credentials are accepted only through `Authorization: Bearer ...` or `X-API-Key` headers. API keys are matched against SHA-256 hashes; plaintext key fields and query-string API keys are not accepted, preventing credentials from entering URLs, browser history, or proxy logs.
+
 ## 1. Requirements and architecture
 
 - [ ] Product requirements, operating modes, environmental limits, lifetime, and target cost are baselined.

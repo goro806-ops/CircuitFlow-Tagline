@@ -228,7 +228,7 @@ async function loginUser(email, password) {
 function optionalAuth(req, res, next) {
   const header = req.headers.authorization || "";
   const bearer = header.startsWith("Bearer ") ? header.slice(7).trim() : null;
-  const keyOrToken = bearer || req.headers["x-api-key"] || req.query.api_key;
+  const keyOrToken = bearer || req.headers["x-api-key"];
 
   Promise.resolve()
     .then(async () => {
@@ -238,11 +238,6 @@ function optionalAuth(req, res, next) {
         else user = await store.getUserByApiKey(keyOrToken);
       }
       if (user) {
-        if (user.api_key && !user.api_key_hash) {
-          user.api_key_hash = hashApiKey(user.api_key);
-          delete user.api_key;
-          await store.upsertUser(user);
-        }
         req.user = {
           user_id: user.user_id,
           name: user.name,

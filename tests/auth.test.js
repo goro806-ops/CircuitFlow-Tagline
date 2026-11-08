@@ -17,6 +17,18 @@ async function runTests() {
   assert.strictEqual(typeof stored.api_key_hash, 'string');
   assert.strictEqual(stored.api_key_hash.length, 64);
 
+  const queryRequest = { headers: {}, query: { api_key: registered.api_key } };
+  await new Promise((resolve, reject) => {
+    auth.optionalAuth(queryRequest, {}, () => {
+      try {
+        assert.strictEqual(queryRequest.user, null);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+
   console.log('API-key hashing and lookup checks passed.');
 }
 

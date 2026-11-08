@@ -143,12 +143,12 @@ async function getUserByApiKey(apiKey) {
   const hash = require("crypto").createHash("sha256").update(String(apiKey)).digest("hex");
   if (await initPostgres()) {
     const r = await pool.query(
-      "SELECT data FROM cf_users WHERE data->>'api_key_hash' = $1 OR data->>'api_key' = $2 LIMIT 1",
-      [hash, apiKey]
+      "SELECT data FROM cf_users WHERE data->>'api_key_hash' = $1 LIMIT 1",
+      [hash]
     );
     return r.rows[0]?.data || null;
   }
-  return loadJsonStore().users.find(u => u.api_key_hash === hash || u.api_key === apiKey) || null;
+  return loadJsonStore().users.find(u => u.api_key_hash === hash) || null;
 }
 
 async function upsertUser(user) {
