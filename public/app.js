@@ -213,9 +213,6 @@ document.addEventListener('DOMContentLoaded', () => {
     btnGenerateAll.textContent = '⚡ Synthesizing Consumer Profile & Architecture...';
 
     try {
-      const provider = document.getElementById('select-ai-provider')?.value || 'openai';
-      const apiKey = document.getElementById('input-ai-key')?.value || '';
-
       // 1. Consumer Profile
       const consumerRes = await fetch('/api/generate/consumer', {
         method: 'POST',
@@ -230,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const archRes = await fetch('/api/generate/architecture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, constraints: { maxBOMCostUSD: maxCost }, apiKey, provider })
+        body: JSON.stringify({ prompt, constraints: { maxBOMCostUSD: maxCost } })
       });
       const archData = await archRes.json();
       projectData.architecture = archData.architecture;
