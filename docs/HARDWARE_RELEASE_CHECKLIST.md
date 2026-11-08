@@ -22,6 +22,8 @@ Project reads and exports are private by default once a project has an `owner_id
 
 The project-list endpoint follows the same boundary: unauthenticated callers receive ownerless disposable summaries only; authenticated callers receive their own summaries plus ownerless diagnostics. Owned project IDs, prompts, statuses, and BOM totals are not listed to anonymous callers.
 
+New design generation through `POST /api/agents/run` requires authentication. The server assigns the generated project to the authenticated user before persistence; anonymous callers cannot create ownerless projects containing customer design data.
+
 ## 1. Requirements and architecture
 
 - [ ] Product requirements, operating modes, environmental limits, lifetime, and target cost are baselined.

@@ -61,6 +61,13 @@ async function main() {
   const projects = await request(`/api/agents/projects?cachebust=${cacheBust}`);
   assert(projects.json?.ownerless_only === true, 'unauthenticated project listing is not ownerless-only');
   assert((projects.json?.projects || []).every(project => !project.owner_id), 'unauthenticated project listing exposed an owned project');
+  const unauthenticatedRun = await request(`/api/agents/run?cachebust=${cacheBust}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'privacy smoke test; do not create a project' }),
+    expectedStatus: 401
+  });
+  assert(unauthenticatedRun.json?.success === false && unauthenticatedRun.check.passed, 'unauthenticated design creation was not rejected');
   const project = await request(`/api/agents/projects/${projectId}?cachebust=${cacheBust}`);
   assert(project.json?.success === true, 'project retrieval failed');
   const unknownProject = await request('/api/agents/projects/live-smoke-unknown-project?cachebust=' + cacheBust, { expectedStatus: 404 });

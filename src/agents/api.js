@@ -130,7 +130,7 @@ router.get("/llm/test", async (req, res) => {
   }
 });
 
-router.post("/run", async (req, res) => {
+router.post("/run", requireAuth, async (req, res) => {
   try {
     const prompt = (req.body && req.body.prompt) || "";
     if (!prompt || typeof prompt !== "string") {
@@ -146,10 +146,8 @@ router.post("/run", async (req, res) => {
 
     const project = await runPipeline(prompt);
 
-    if (req.user) {
-      project.owner_id = req.user.user_id;
-      project.owner_name = req.user.name;
-    }
+    project.owner_id = req.user.user_id;
+    project.owner_name = req.user.name;
     await store.saveProject(project);
 
     res.json({
