@@ -18,6 +18,8 @@ The exact server-generated KiCad result can be recorded by an authenticated proj
 
 The exact server-generated SPICE result can be recorded with `POST /api/agents/projects/:id/spice-validation`. The endpoint runs the configured solver, stores the convergence status, engine, netlist SHA-256, and source-design fingerprint, and records the authenticated user and timestamp. Analytical fallback results do not satisfy the production release gate.
 
+Project reads and exports are private by default once a project has an `owner_id`: unauthenticated requests receive `401`, and authenticated users cannot access another owner’s project. Ownerless disposable validation projects remain readable for diagnostic smoke tests only and must never contain private customer design data.
+
 ## 1. Requirements and architecture
 
 - [ ] Product requirements, operating modes, environmental limits, lifetime, and target cost are baselined.
