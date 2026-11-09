@@ -14,6 +14,26 @@ function authHeaders() {
   return h;
 }
 
+function bindProtectedDownload(element, url, filename) {
+  if (!element) return;
+  element.href = '#';
+  element.onclick = async (event) => {
+    event.preventDefault();
+    try {
+      const response = await fetch(url, { headers: authHeaders() });
+      if (!response.ok) throw new Error(`Download failed (HTTP ${response.status})`);
+      const blob = await response.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      alert(error.message || 'Download failed');
+    }
+  };
+}
+
 function projectIdFromUrl() {
   const q = new URLSearchParams(window.location.search);
   return q.get("id") || "";
@@ -48,11 +68,11 @@ function render(project) {
   $("statLayers").textContent = pcb?.layers != null ? String(pcb.layers) : "—";
 
   const base = `/api/agents/projects/${encodeURIComponent(id)}`;
-  $("dlJson").href = `${base}/export`;
-  $("dlStl").href = `${base}/enclosure.stl`;
-  $("dlScad").href = `${base}/enclosure.scad`;
-  $("dlSch").href = `${base}/kicad.sch`;
-  $("dlPcb").href = `${base}/kicad.pcb`;
+  bindProtectedDownload($("dlJson"), `${base}/export`, `${id}.json`);
+  bindProtectedDownload($("dlStl"), `${base}/enclosure.stl`, `${id}.stl`);
+  bindProtectedDownload($("dlScad"), `${base}/enclosure.scad`, `${id}.scad`);
+  bindProtectedDownload($("dlSch"), `${base}/kicad.sch`, `${id}.kicad_sch`);
+  bindProtectedDownload($("dlPcb"), `${base}/kicad.pcb`, `${id}.kicad_pcb`);
 
   $("constraintsOut").textContent = JSON.stringify(
     project.user_intent?.parsed_constraints || {},

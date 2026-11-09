@@ -41,6 +41,26 @@ function authHeaders(extra = {}) {
   return h;
 }
 
+function bindProtectedDownload(element, url, filename) {
+  if (!element) return;
+  element.href = '#';
+  element.onclick = async (event) => {
+    event.preventDefault();
+    try {
+      const response = await fetch(url, { headers: authHeaders() });
+      if (!response.ok) throw new Error(`Download failed (HTTP ${response.status})`);
+      const blob = await response.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      alert(error.message || 'Download failed');
+    }
+  };
+}
+
 function updateAuthUI() {
   const user = getUser();
   const chip = $("userChip");
@@ -162,9 +182,9 @@ function renderSummary(data) {
   const kicadLink = $("kicadLink");
   const viewLink = $("viewProjectLink");
   if (id) {
-    if (exportLink) { exportLink.href = `/api/agents/projects/${id}/export`; show(exportLink); }
-    if (stlLink) { stlLink.href = `/api/agents/projects/${id}/enclosure.stl`; show(stlLink); }
-    if (kicadLink) { kicadLink.href = `/api/agents/projects/${id}/kicad.sch`; show(kicadLink); }
+    bindProtectedDownload(exportLink, `/api/agents/projects/${id}/export`, `${id}.json`); if (exportLink) show(exportLink);
+    bindProtectedDownload(stlLink, `/api/agents/projects/${id}/enclosure.stl`, `${id}.stl`); if (stlLink) show(stlLink);
+    bindProtectedDownload(kicadLink, `/api/agents/projects/${id}/kicad.sch`, `${id}.kicad_sch`); if (kicadLink) show(kicadLink);
     if (viewLink) {
       viewLink.href = `/project.html?id=${encodeURIComponent(id)}`;
       show(viewLink);
